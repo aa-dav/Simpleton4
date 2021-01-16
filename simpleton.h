@@ -52,62 +52,54 @@ const int COND_NCARRY	=	5;
 const int COND_GT	=	6;
 const int COND_GTE	=	7;
 
-const int OP_MOV	=	0x00;
-const int OP_MOVF	=	0x01;
-const int OP_INC	=	0x02;
-const int OP_DEC	=	0x03;
-const int OP_INC2	=	0x04;
-const int OP_DEC2	=	0x05;
-
-const int OP_CMP	=	0x10;
-const int OP_ADD	=	0x11;
-const int OP_ADC	=	0x12;
-const int OP_SUB	=	0x13;
-const int OP_SBC	=	0x14;
-const int OP_AND	=	0x15;
-const int OP_OR		=	0x16;
-const int OP_XOR	=	0x17;
+const int OP_ADDI	=	0x00;
+const int OP_ADDIS	=	0x01;
+const int OP_ADD	=	0x02;
+const int OP_ADC	=	0x03;
+const int OP_SUB	=	0x04;
+const int OP_SBC	=	0x05;
+const int OP_AND	=	0x06;
+const int OP_OR		=	0x07;
+const int OP_XOR	=	0x08;
+const int OP_CMP	=	0x09;
+const int OP_CADD	=	0x0A;
+const int OP_RRCI	=	0x0B;
+const int OP_RRC	=	0x0C;
 
 const int PORT_CONSOLE	=	0xFFFF;
 const int PORT_START	=	0xFFFF;
 
 struct Instruction
 {
-	mTag	src;
-	bool	srcInd;
-	mTag	dst;
-	bool	dstInd;
-	mTag	cond;
+	mTag	x;
+	bool	xi;
+	mTag	y;
+	bool	yi;
+	mTag	r;
+	bool	ri;
 	mTag	cmd;
-	mTag	twoOps;
 
 	void decode( mWord word )
 	{
 		// 0b0000000000000000
-		src	= (word & 0b0000000000000111) >> 0;
-		srcInd	= (word & 0b0000000000001000) >> 3;
-		dst	= (word & 0b0000000001110000) >> 4;
-		dstInd	= (word & 0b0000000010000000) >> 7;
-		cond	= (word & 0b0000011100000000) >> 8;
-		twoOps	= (word & 0b0000100000000000) >> 11;
+		x	= (word & 0b0000000000000111) >> 0;
+		xi	= (word & 0b0000000000001000) >> 3;
+		y	= (word & 0b0000000001110000) >> 4;
+		yi	= (word & 0b0000000010000000) >> 7;
+		r	= (word & 0b0000011100000000) >> 8;
+		ri	= (word & 0b0000100000000000) >> 11;
 		cmd	= (word & 0b1111000000000000) >> 12;
 	};
 
-	static mWord encode( mTag _dst, mTag _cmd, mTag _src, mTag _cond )
+	static mWord encode( mTag _cmd, mTag _r, mTag _y, mTag _x )
 	{
-		mTag _twoOps = 0;
-		if ( _cmd >= 16 ) 
-		{
-			_cmd -= 16;
-			_twoOps = 1;
-		};
-		return (_twoOps << 11) | (_cmd << 12) | (_cond << 8) | (_dst << 4) | (_src << 0);
+		return (_cmd << 12) | (_r << 8) | (_y << 4) | (_x << 0);
 	};
 
 	void show( int addr )
 	{
-		std::cout << "src:" << (int) src << " si:" << (int) srcInd << " dst:" << (int) dst << " di:" << (int) dstInd << 
-			" cond:" << (int) cond << " to:" << (int) twoOps << " cmd:" << (int) cmd << " at addr:" << addr << "\n";
+		std::cout << "x:" << (int) x << " xi:" << (int) xi << " y:" << (int) y << " yi:" << (int) yi << 
+			" r:" << r << " ri:" << (int) ri << " cmd:" << cmd << " at addr:" << addr << "\n";
 	};
 };
 
@@ -127,7 +119,7 @@ private:
 	mWord		mem[ 65536 ];
 	mWord		reg[ 8 ];
 	Instruction	instr;
-	mWord		x, y, a, dstAddr;
+	mWord		x, y, a;
 	uint32_t	tmp;
 
 	mWord getMem( mWord addr );
@@ -152,6 +144,24 @@ private:
 		a = tmp & 0xFFFF;
 		setFlag( FLAG_CARRY, tmp & 0x10000 );
 		setFlag( FLAG_ZERO, a == 0 );
+	}
+	mTag read( mTag r, mTag i )
+	{
+		if ( i )
+		{
+			mTag addr;
+			if ( r == REG_FLAGS )
+				addr = fetch();
+			else
+				addr = reg[ r ];
+			if ( (r == REG_PC) || (r == REG_SP) )
+				reg[ r ]++;
+			return getMem( addr );
+		}
+		else
+		{
+			return reg[ r ];
+		}
 	}
 
 public:

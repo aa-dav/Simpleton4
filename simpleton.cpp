@@ -44,101 +44,30 @@ void Machine::setMem( mWord addr, mWord data )
 
 void Machine::step()
 {
-	bool skip = false;
 	// fetch & decode instruction
 	instr.decode( fetch() );
-	//instr.show( reg[ REG_PC ] - 1 );
-	
-	// get src to x
-	if ( instr.srcInd && ((instr.src == REG_FLAGS) || (instr.src == REG_PC)) )
-		x = fetch();
+	instr.show( reg[ REG_PC ] - 1 );
+
+	// read x
+	if ( (instr.cmd == OP_ADDI) || (instr.cmd == OP_ADDIS) || (instr.cmd == OP_RRCI) )
+	{
+		x = instr.xi ? -instr.x - 1 : instr.x; // immediate x mode
+	}
 	else
-		x = reg[ instr.src ];
+	{
+		x = read( instr.x, instr.xi );
+	}
+	y = read( instr.y, instr.yi );
 	
-	// get dst to y
-	if ( instr.dstInd && (instr.dst == REG_FLAGS) )
-		y = fetch();
-	else
-		y = reg[ instr.dst ];
-		// condition...
-	switch ( instr.cond )
-	{
-	case COND_ZERO:
-		skip = !getFlag( FLAG_ZERO );
-		break;
-	case COND_NZERO:
-		skip = getFlag( FLAG_ZERO );
-		break;
-	case COND_CARRY:
-		skip = !getFlag( FLAG_CARRY );
-		break;
-	case COND_NCARRY:
-		skip = getFlag( FLAG_CARRY );
-		break;
-	case COND_GT:
-		break;
-	case COND_GTE:
-		break;
-	default:	// COND_ALWAYS
-		break;
-	};
-	if ( skip )
-		return;
-		// indirect mode
-	if ( instr.srcInd && (instr.src != REG_PC) )
-	{
-		x = getMem( x );
-		if ( instr.src == REG_SP )
-			reg[ instr.src ]++;
-	};
-	if ( instr.dstInd )
-	{
-		if ( instr.dst == REG_SP )
-		{
-			reg[ instr.dst ]--;
-			y = reg[ instr.dst ];
-	        };
-		dstAddr = y;
-		if ( instr.twoOps )
-			y = getMem( y );
-	};
 	// ALU
 	tmp = 0;
-	switch ( instr.cmd + (instr.twoOps ? 16 : 0) )	// combined opcode
+	switch ( instr.cmd )	// combined opcode
 	{
-			// *** SINGLE OPERAND ***
-	case OP_MOV:	// mov
-			a = x;
-			break;
-	case OP_MOVF:	// movf
-			tmp = x;
-			mathTempApply();
-			break;
-	case OP_INC:	// inc
-			tmp = x + 1;
-			mathTempApply();
-			break;
-	case OP_DEC:	// dec
-			tmp = x - 1;
-			mathTempApply();
-			break;
-	case OP_INC2:	// inc2
-			tmp = x + 2;
-			mathTempApply();
-			break;
-	case OP_DEC2:	// dec2
-			tmp = x - 2;
-			mathTempApply();
-			break;
-			
-			// *** TWO OPERANDS ***
-	case OP_CMP:	// cmp
-			a = y;	// to keep Y intact...
-			tmp = y - x;
-			setFlag( FLAG_CARRY, tmp & 0x10000 );
-			setFlag( FLAG_ZERO, (tmp & 0xFFFF) == 0 );
+	case OP_ADDIS:	// addis
+			a = y + x;
 			break;
 	case OP_ADD:	// add
+	case OP_ADDI:	// addi
 			tmp = y + x;
 			mathTempApply();
 			break;
@@ -156,19 +85,42 @@ void Machine::step()
 	case OP_AND:	// and
 			tmp = x & y;
 			mathTempApply();
-	case OP_OR:		// or
+	case OP_OR:	// or
 			tmp = x | y;
 			mathTempApply();
 	case OP_XOR:	// xor
 			tmp = x ^ y;
 			mathTempApply();
-		break;
+			break;
+	case OP_CMP:	// cmp
+			a = y;	// to keep Y intact...
+			tmp = y - x;
+			setFlag( FLAG_CARRY, tmp & 0x10000 );
+			setFlag( FLAG_ZERO, (tmp & 0xFFFF) == 0 );
+			break;
+	case OP_CADD:	//
+			break;
+	case OP_RRCI:	//
+			break;
+	case OP_RRC:	//
+			break;
 	};
 	// store
-	if ( instr.dstInd )
-		setMem( dstAddr , a );
+	if ( instr.ri )
+	{
+		mTag addr;
+		if ( instr.r == REG_SP )
+			reg[ instr.r ]--;
+		if ( instr.r == REG_FLAGS )
+			addr = fetch();
+		else
+			addr = reg[ instr.r ];
+		setMem( addr, a );
+	}
 	else
-		reg[ instr.dst ] = a;
+	{
+		reg[ instr.r ] = a;
+	}
 };
 
 void Machine::show()
@@ -180,7 +132,7 @@ void Machine::show()
 		else if ( i == REG_PC )
 			std::cout << "PC";
 		else if ( i == REG_FLAGS )
-			std::cout << "FL";
+			std::cout << "PW";
 		else
 			std::cout << "R" << i;
 		std::cout << ":" << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << reg[ i ];
@@ -227,33 +179,22 @@ void Assembler::parseStart()
 	identifiers[ "r7" ]		= Identifier( Identifier::Register, REG_R7 );
 	identifiers[ "pc" ]		= Identifier( Identifier::Register, REG_PC );
 	identifiers[ "sp" ]		= Identifier( Identifier::Register, REG_SP );
-	identifiers[ "flags" ]	= Identifier( Identifier::Register, REG_FLAGS );
+	identifiers[ "flags" ]		= Identifier( Identifier::Register, REG_FLAGS );
 
-	identifiers[ "=" ]		= Identifier( Identifier::Command, OP_MOV );
-	identifiers[ "=?" ]		= Identifier( Identifier::Command, OP_MOVF );
-	identifiers[ "=+1" ]	= Identifier( Identifier::Command, OP_INC );
-	identifiers[ "=-1" ]	= Identifier( Identifier::Command, OP_DEC );
-	identifiers[ "=+2" ]	= Identifier( Identifier::Command, OP_INC2 );
-	identifiers[ "=-2" ]	= Identifier( Identifier::Command, OP_DEC2 );
+	identifiers[ "addi" ]		= Identifier( Identifier::Command, OP_ADDI );
+	identifiers[ "addis" ]		= Identifier( Identifier::Command, OP_ADDIS );
 	
-	identifiers[ "<?>" ]	= Identifier( Identifier::Command, OP_CMP );
-	identifiers[ "+=" ]		= Identifier( Identifier::Command, OP_ADD );
-	identifiers[ "+c=" ]	= Identifier( Identifier::Command, OP_ADC );
-	identifiers[ "-=" ]		= Identifier( Identifier::Command, OP_SUB );
-	identifiers[ "-c=" ]	= Identifier( Identifier::Command, OP_SBC );
-	identifiers[ "&=" ]		= Identifier( Identifier::Command, OP_AND );
-	identifiers[ "|=" ]		= Identifier( Identifier::Command, OP_OR );
-	identifiers[ "^=" ]		= Identifier( Identifier::Command, OP_XOR );
-
-	identifiers[ "@@" ]		= Identifier( Identifier::Condition, COND_ALWAYS );
-	identifiers[ "@z" ]		= Identifier( Identifier::Condition, COND_ZERO );
-	identifiers[ "@nz" ]	= Identifier( Identifier::Condition, COND_NZERO );
-	identifiers[ "@=" ]		= Identifier( Identifier::Condition, COND_ZERO );
-	identifiers[ "@!=" ]	= Identifier( Identifier::Condition, COND_NZERO );
-	identifiers[ "@c" ]		= Identifier( Identifier::Condition, COND_CARRY );
-	identifiers[ "@nc" ]	= Identifier( Identifier::Condition, COND_NCARRY );
-	identifiers[ "@>" ]		= Identifier( Identifier::Condition, COND_GT );
-	identifiers[ "@>=" ]	= Identifier( Identifier::Condition, COND_GTE );
+	identifiers[ "add" ]		= Identifier( Identifier::Command, OP_ADD );
+	identifiers[ "adc" ]		= Identifier( Identifier::Command, OP_ADC );
+	identifiers[ "sub" ]		= Identifier( Identifier::Command, OP_SUB );
+	identifiers[ "sbc" ]		= Identifier( Identifier::Command, OP_SBC );
+	identifiers[ "cmp" ]		= Identifier( Identifier::Command, OP_CMP );
+	identifiers[ "and" ]		= Identifier( Identifier::Command, OP_AND );
+	identifiers[ "or" ]		= Identifier( Identifier::Command, OP_OR );
+	identifiers[ "xor" ]		= Identifier( Identifier::Command, OP_XOR );
+	identifiers[ "cadd" ]		= Identifier( Identifier::Command, OP_CADD );
+	identifiers[ "rrci" ]		= Identifier( Identifier::Command, OP_RRCI );
+	identifiers[ "rrc" ]		= Identifier( Identifier::Command, OP_RRC );
 
 	forwards.clear();
 }
@@ -436,7 +377,7 @@ void Assembler::parseLine( const std::string &line )
 	int emitX = -1;
 	int emitY = -1;
 	int stage = 0;
-	int dst = -1, src = -1, cmd = -1, cond = 0;
+	int r = -1, x = -1, y = -1, cmd = -1, cond = -1;
 	int yForwRefInd = -1;
 	enum EmitSome
 	{
@@ -543,6 +484,7 @@ void Assembler::parseLine( const std::string &line )
 		{
 			indirect = false;
 		}
+		/*
 		else if ( lexem == "ret" )
 		{
 			if ( stage != 0 )
@@ -581,6 +523,7 @@ void Assembler::parseLine( const std::string &line )
 			cmd = OP_MOV;
 			org++; // primary instruction will be placed next
 		}
+		*/
 		else
 		{
 			auto it = identifiers.find( lexem );
