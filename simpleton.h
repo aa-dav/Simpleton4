@@ -142,7 +142,7 @@ private:
 	void mathTempApply()
 	{
 		a = tmp & 0xFFFF;
-		setFlag( FLAG_CARRY, tmp & 0x10000 );
+		setFlag( FLAG_CARRY, (tmp & 0x10000) != 0 );
 		setFlag( FLAG_ZERO, a == 0 );
 	}
 	mWord read( mTag r, mTag i )

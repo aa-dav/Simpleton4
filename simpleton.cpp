@@ -63,7 +63,7 @@ void Machine::step()
 	}
 	y = read( instr.y, instr.yi );
 
-	//std::cout << "cmd:" << instr.cmd << " y:" << y << " x:" << x << "\n";
+	//std::cout << "cmd:" << (int) instr.cmd << " y:" << y << " x:" << x << "\n";
 	// ALU
 	tmp = 0;
 	switch ( instr.cmd )	// combined opcode
@@ -210,7 +210,7 @@ void Assembler::parseStart()
 	identifiers[ "addi" ]		= Identifier( Identifier::Command, OP_ADDI );
 	identifiers[ "addis" ]		= Identifier( Identifier::Command, OP_ADDIS );
 
-	identifiers[ "move" ]		= Identifier( Identifier::Command, OP_ADDIS );	// shortcut for addis 0
+	identifiers[ "move" ]		= Identifier( Identifier::Command, OP_ADDIS );	// shortcut for addis
 	
 	identifiers[ "add" ]		= Identifier( Identifier::Command, OP_ADD );
 	identifiers[ "adds" ]		= Identifier( Identifier::Command, OP_ADDS );
@@ -403,13 +403,15 @@ mWord Assembler::parseConstExpr( const std::string &expr, int addrForForward )
 void Assembler::parseLine( const std::string &line )
 {
 	bool indirect = false;
-	int emitX = -1;
-	int emitY = -1;
-	int emitR = -1;
+	const int noEmit = -100000;
+	int emitX = noEmit;
+	int emitY = noEmit;
+	int emitR = noEmit;
 	int stage = 0;
 	int r = -1, x = -1, y = -1, cmd = -1, cond = -1;
 	std::string fwdR, fwdX, fwdY;
 	bool inpImm = false; // inplace immediate mode
+	bool emitForCall = false;
 
 	lineNum++;
 	extractLexems( line );
@@ -515,46 +517,28 @@ void Assembler::parseLine( const std::string &line )
 		{
 			indirect = false;
 		}
-		/*
 		else if ( lexem == "ret" )
 		{
 			if ( stage != 0 )
 				throw ParseError( lineNum, "RET in wrong place!" );
-			stage = 3;
-			dst = REG_PC;
-			src = REG_SP + 8;
-			cmd = OP_MOV;
-		}
-		else if ( lexem == "qret" )
-		{
-			if ( stage != 0 )
-				throw ParseError( lineNum, "QRET in wrong place!" );
-			stage = 3;
-			dst = REG_PC;
-			src = REG_R4;
-			cmd = OP_MOV;
+			cmd = OP_ADDIS;
+			inpImm = true;
+			r = REG_PC;
+			y = IND_SP;
+			x = IMMED;
+			emitX = 0;
+			stage = 4;
 		}
 		else if ( lexem == "call" )
 		{
 			if ( stage != 0 )
 				throw ParseError( lineNum, "CALL in wrong place!" );
-			emitSome = EmitForCall;
+			emitForCall = true;
+			cmd = OP_ADDIS;
+			inpImm = true;
+			r = REG_PC;
 			stage = 2;
-			dst = REG_PC;
-			cmd = OP_MOV;
-			org++; // primary instruction will be placed next
 		}
-		else if ( lexem == "qcall" )
-		{
-			if ( stage != 0 )
-				throw ParseError( lineNum, "QCALL in wrong place!" );
-			emitSome = EmitForQCall;
-			stage = 2;
-			dst = REG_PC;
-			cmd = OP_MOV;
-			org++; // primary instruction will be placed next
-		}
-		*/
 		else
 		{
 			auto it = identifiers.find( lexem );
@@ -675,24 +659,26 @@ void Assembler::parseLine( const std::string &line )
 		if ( (emitX < -8) || (emitX > +7) )
 			throw ParseError( lineNum, "Inplace immediate X is too big!" );
 		x = emitX & 0b1111;
-		emitX = -1;
+		emitX = noEmit;
 	}
+	if ( emitForCall )
+		op( OP_ADDIS, IND_SP, REG_PC, 2 );
 
 	op( cmd, r, y, x );
 	// immediates...
-	if ( emitX != -1 )
+	if ( emitX != noEmit )
 	{
 		data( emitX );
 		if ( !fwdX.empty() )
 			forwards.emplace_back( fwdX, org - 1, lineNum );
 	}
-	if ( emitY != -1 )
+	if ( emitY != noEmit )
 	{
 		data( emitY );
 		if ( !fwdY.empty() )
 			forwards.emplace_back( fwdY, org - 1, lineNum );
 	}
-	if ( emitR != -1 )
+	if ( emitR != noEmit )
 	{
 		data( emitR );
 		if ( !fwdR.empty() )
