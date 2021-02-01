@@ -44,6 +44,7 @@ void Machine::setMem( mWord addr, mWord data )
 
 void Machine::step()
 {
+	mWord cond;
 	// fetch & decode instruction
 	instr.decode( fetch() );
 	instr.show( reg[ REG_PC ] - 1 );
@@ -51,7 +52,10 @@ void Machine::step()
 	// read x
 	if ( (instr.cmd == OP_ADDI) || (instr.cmd == OP_ADDIS) || (instr.cmd == OP_RRCI) )
 	{
-		x = instr.xi ? -instr.x - 1 : instr.x; // immediate x mode
+		if ( instr.xi )
+			x = 0xFFF8 | instr.x;
+		else
+			x = instr.x;
 	}
 	else
 	{
@@ -64,6 +68,7 @@ void Machine::step()
 	switch ( instr.cmd )	// combined opcode
 	{
 	case OP_ADDIS:	// addis
+	case OP_ADDS:	// adds
 			a = y + x;
 			break;
 	case OP_ADD:	// add
@@ -98,7 +103,22 @@ void Machine::step()
 			setFlag( FLAG_CARRY, tmp & 0x10000 );
 			setFlag( FLAG_ZERO, (tmp & 0xFFFF) == 0 );
 			break;
-	case OP_CADD:	//
+	case OP_CADD:	// conditional add
+			cond = (x >> 13) & 0b111;
+			x = x & 0b1111111111111; // 13 bit
+			if ( x & 0b1000000000000 )
+				x = x | 0b1110000000000000; // negative extension
+			if ( 	((cond == COND_ZERO) && (getFlag( FLAG_ZERO ))) ||
+				((cond == COND_NZERO) && (!getFlag( FLAG_ZERO ))) ||
+				((cond == COND_CARRY) && (getFlag( FLAG_CARRY ))) ||
+				((cond == COND_NCARRY) && (!getFlag( FLAG_CARRY ))) )
+			{
+				a = y + x;
+			}
+			else
+			{
+				a = y;
+			}
 			break;
 	case OP_RRCI:	//
 			break;
@@ -111,7 +131,7 @@ void Machine::step()
 		mTag addr;
 		if ( instr.r == REG_SP )
 			reg[ instr.r ]--;
-		if ( instr.r == REG_FLAGS )
+		if ( instr.r == REG_PSW )
 			addr = fetch();
 		else
 			addr = reg[ instr.r ];
@@ -131,7 +151,7 @@ void Machine::show()
 			std::cout << "SP";
 		else if ( i == REG_PC )
 			std::cout << "PC";
-		else if ( i == REG_FLAGS )
+		else if ( i == REG_PSW )
 			std::cout << "PW";
 		else
 			std::cout << "R" << i;
@@ -179,12 +199,13 @@ void Assembler::parseStart()
 	identifiers[ "r7" ]		= Identifier( Identifier::Register, REG_R7 );
 	identifiers[ "pc" ]		= Identifier( Identifier::Register, REG_PC );
 	identifiers[ "sp" ]		= Identifier( Identifier::Register, REG_SP );
-	identifiers[ "flags" ]		= Identifier( Identifier::Register, REG_FLAGS );
+	identifiers[ "psw" ]		= Identifier( Identifier::Register, REG_PSW );
 
 	identifiers[ "addi" ]		= Identifier( Identifier::Command, OP_ADDI );
 	identifiers[ "addis" ]		= Identifier( Identifier::Command, OP_ADDIS );
 	
 	identifiers[ "add" ]		= Identifier( Identifier::Command, OP_ADD );
+	identifiers[ "adds" ]		= Identifier( Identifier::Command, OP_ADDS );
 	identifiers[ "adc" ]		= Identifier( Identifier::Command, OP_ADC );
 	identifiers[ "sub" ]		= Identifier( Identifier::Command, OP_SUB );
 	identifiers[ "sbc" ]		= Identifier( Identifier::Command, OP_SBC );
@@ -376,16 +397,11 @@ void Assembler::parseLine( const std::string &line )
 	bool indirect = false;
 	int emitX = -1;
 	int emitY = -1;
+	int emitR = -1;
 	int stage = 0;
 	int r = -1, x = -1, y = -1, cmd = -1, cond = -1;
-	int yForwRefInd = -1;
-	enum EmitSome
-	{
-		EmitNone = 0,
-		EmitForCall = 1,
-		EmitForQCall = 2
-	};
-	EmitSome emitSome = EmitNone;
+	std::string fwdR, fwdX, fwdY;
+	bool inpImm = false; // inplace immediate mode
 
 	lineNum++;
 	extractLexems( line );
@@ -452,7 +468,7 @@ void Assembler::parseLine( const std::string &line )
 		        	data( fill );
 			return;	// no futher actions required
 		}
-		else if ( (lexem[ 0 ] == '$') || isdigit( lexem[ 0 ] ) )
+		else if ( (lexem[ 0 ] == '$') || isdigit( lexem[ 0 ] ) || (lexem[ 0 ] == '-') )
 		{
 			// Literal
 			int value;
@@ -460,15 +476,22 @@ void Assembler::parseLine( const std::string &line )
 				value = strtol( lexem.c_str() + 1, nullptr, 16 );
 			else
 				value = strtol( lexem.c_str(), nullptr, 10 );
-			if ( (stage == 0) && indirect )
+			if ( (stage == 1) && indirect )
 			{
-				emitY = value;
-				dst = IND_IMMED;
+				emitR = value;
+				r = IND_IMMED;
 			}
 			else if ( stage == 2 )
 			{
+				emitY = value;
+				y = indirect ? IND_IMMED : IMMED;
+			}
+			else if ( stage == 3 )
+			{
+				if ( inpImm && indirect )
+					throw ParseError( lineNum, "Inplace immediate cannot be indirect!" );
 				emitX = value;
-				src = indirect ? IND_IMMED : IMMED;
+				x = indirect ? IND_IMMED : IMMED;
 			}
 			else
 			{
@@ -532,15 +555,22 @@ void Assembler::parseLine( const std::string &line )
 				Identifier &iden = it->second;
 				if ( iden.type == Identifier::Symbol )
 				{
-					if ( (stage == 0) && indirect )
+					if ( (stage == 1) && indirect )
 					{
-						emitY = iden.value;
-						dst = IND_IMMED;
+						emitR = iden.value;
+						r = IND_IMMED;
 					}
 					else if ( stage == 2 )
 					{
+						emitY = iden.value;
+						y = indirect ? IND_IMMED : IMMED;
+					}
+					else if ( stage == 3 )
+					{
+						if ( inpImm && indirect )
+							throw ParseError( lineNum, "Inplace immediate cannot be indirect!" );
 						emitX = iden.value;
-						src = indirect ? IND_IMMED : IMMED;
+						x = indirect ? IND_IMMED : IMMED;
 					}
 					else
 					{
@@ -549,13 +579,19 @@ void Assembler::parseLine( const std::string &line )
 				}
 				else if ( iden.type == Identifier::Register )
 				{
-					if ( stage == 0 )
+					if ( stage == 1 )
 					{
-						dst = iden.value + (indirect ? 8 : 0);
+						r = iden.value + (indirect ? 8 : 0);
 					}
 					else if ( stage == 2 )
 					{
-						src = iden.value + (indirect ? 8 : 0);
+						y = iden.value + (indirect ? 8 : 0);
+					}
+					else if ( stage == 3 )
+					{
+						if ( inpImm )
+							throw ParseError( lineNum, "Inplace immediate cannot be register!" );
+						x = iden.value + (indirect ? 8 : 0);
 					}
 					else
 					{
@@ -564,19 +600,16 @@ void Assembler::parseLine( const std::string &line )
 				}
 				else if ( iden.type == Identifier::Command )
 				{
-					if ( stage == 1 )
+					if ( stage == 0 )
 					{
 						cmd = iden.value;
+						if ( (cmd == OP_ADDI) || (cmd == OP_ADDIS) || (cmd == OP_RRCI) )
+							inpImm = true;	// detect inplace immediate mode for simplicity
 					}
 					else
 					{
 						throw ParseError( lineNum, "command '" + lexem + "' at wrong place!" );
 					}
-				}
-				else if ( iden.type == Identifier::Condition )
-				{       	
-					cond = iden.value;
-					stage--;	// condition must keep current stage...
 				}
 				else
 				{
@@ -585,19 +618,23 @@ void Assembler::parseLine( const std::string &line )
 			}
 			else
 			{
-				if ( (stage == 0) && indirect )
+				if ( (stage == 1) && indirect )
 				{
-					emitY = 0;
-					forwards.emplace_back( lexem, org + 1, lineNum );
-					yForwRefInd = forwards.size() - 1;
-					dst = IND_IMMED;
+					emitR = 0;
+					fwdR = lexem;
+					r = IND_IMMED;
 				}
 				else if ( stage == 2 )
 				{
+					emitY = 0;
+					fwdY = lexem;
+					y = indirect ? IND_IMMED : IMMED;
+				}
+				else if ( stage == 3 )
+				{
 					emitX = 0;
-					forwards.emplace_back( lexem, org + 1, lineNum );
-					src = indirect ? IND_IMMED : IMMED;
-					//std::cout << "Forward to resolve: " << lexem << "\n";
+					fwdX = lexem;
+					x = indirect ? IND_IMMED : IMMED;
 				}
 				else
 				{
@@ -612,26 +649,48 @@ void Assembler::parseLine( const std::string &line )
 	if ( stage == 0 )
 		return;	// just comment?
 
-	if ( dst == -1 )
-		throw ParseError( lineNum, "DST is undefined!" );
-	if ( src == -1 )
-		throw ParseError( lineNum, "SRC is undefined!" );
 	if ( cmd == -1 )
 		throw ParseError( lineNum, "CMD is undefined!" );
-	if ( emitSome == EmitForCall )
-		op( REG_SP + 8, OP_INC2, REG_PC, cond, org - 1 );
-	else if ( emitSome == EmitForQCall )
-		op( REG_R4, OP_INC2, REG_PC, cond, org - 1 );
-	op( dst, cmd, src, cond );
+	if ( r == -1 )
+		throw ParseError( lineNum, "R is undefined!" );
+	if ( y == -1 )
+		throw ParseError( lineNum, "Y is undefined!" );
+	if ( x == -1 )
+	{
+		x = IMMED;
+		emitX = 0;
+	};
+
+	if ( inpImm )
+	{
+		// inplace immediate mode
+		if ( (emitX < -8) || (emitX > +7) )
+			throw ParseError( lineNum, "Inplace immediate X is too big!" );
+		x = emitX & 0b1111;
+		emitX = -1;
+	}
+
+	op( cmd, r, y, x );
 	// immediates...
 	if ( emitX != -1 )
 	{
 		data( emitX );
-		if ( yForwRefInd != -1 )
-			forwards[ yForwRefInd ].addr++;
-	};
+		if ( !fwdX.empty() )
+			forwards.emplace_back( fwdX, org, lineNum );
+	}
 	if ( emitY != -1 )
+	{
 		data( emitY );
+		if ( !fwdY.empty() )
+			forwards.emplace_back( fwdY, org, lineNum );
+	}
+	if ( emitR != -1 )
+	{
+		data( emitR );
+		if ( !fwdR.empty() )
+			forwards.emplace_back( fwdR, org, lineNum );
+	}
+
 }
 
 bool Assembler::parseFile( const std::string &fileName )

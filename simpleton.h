@@ -22,7 +22,7 @@ const int REG_R7	=	7;
 // aliases
 const int REG_SP	=	5;
 const int REG_PC	=	6;
-const int REG_FLAGS	=	7;
+const int REG_PSW	=	7;
 
 const int IND_R0	=	0 + 8;
 const int IND_R1	=	1 + 8;
@@ -44,27 +44,27 @@ const int FLAG_SIGN	=	2;
 const int FLAG_OVERFLOW	=	3;
 const int FLAG_IRQ_ENABLE = 	15;
 
-const int COND_ALWAYS	=	0;
-const int COND_ZERO	=	2;
-const int COND_NZERO	=	3;
-const int COND_CARRY	=	4;
-const int COND_NCARRY	=	5;
-const int COND_GT	=	6;
-const int COND_GTE	=	7;
+const int COND_ZERO	=	0;
+const int COND_NZERO	=	1;
+const int COND_CARRY	=	2;
+const int COND_NCARRY	=	3;
+const int COND_GT	=	4;
+const int COND_GTE	=	5;
 
-const int OP_ADDI	=	0x00;
-const int OP_ADDIS	=	0x01;
-const int OP_ADD	=	0x02;
-const int OP_ADC	=	0x03;
-const int OP_SUB	=	0x04;
-const int OP_SBC	=	0x05;
-const int OP_AND	=	0x06;
-const int OP_OR		=	0x07;
-const int OP_XOR	=	0x08;
-const int OP_CMP	=	0x09;
-const int OP_CADD	=	0x0A;
-const int OP_RRCI	=	0x0B;
-const int OP_RRC	=	0x0C;
+const int OP_ADDIS	=	0x00;
+const int OP_ADDI	=	0x01;
+const int OP_ADDS	=	0x02;
+const int OP_ADD	=	0x03;
+const int OP_ADC	=	0x04;
+const int OP_SUB	=	0x05;
+const int OP_SBC	=	0x06;
+const int OP_AND	=	0x07;
+const int OP_OR		=	0x08;
+const int OP_XOR	=	0x09;
+const int OP_CMP	=	0x0A;
+const int OP_CADD	=	0x0B;
+const int OP_RRCI	=	0x0C;
+const int OP_RRC	=	0x0D;
 
 const int PORT_CONSOLE	=	0xFFFF;
 const int PORT_START	=	0xFFFF;
@@ -99,7 +99,7 @@ struct Instruction
 	void show( int addr )
 	{
 		std::cout << "x:" << (int) x << " xi:" << (int) xi << " y:" << (int) y << " yi:" << (int) yi << 
-			" r:" << r << " ri:" << (int) ri << " cmd:" << cmd << " at addr:" << addr << "\n";
+			" r:" << (int) r << " ri:" << (int) ri << " cmd:" << (int) cmd << " at addr:" << addr << "\n";
 	};
 };
 
@@ -130,14 +130,14 @@ private:
 	}
 	bool getFlag( mTag flag ) 
 	{
-		return (reg[ REG_FLAGS ] & (1 << flag)) != 0;
+		return (reg[ REG_PSW ] & (1 << flag)) != 0;
 	}
 	void setFlag( mTag flag, mTag value ) 
 	{
 		if ( value )
-			reg[ REG_FLAGS ] |= (1 << flag);
+			reg[ REG_PSW ] |= (1 << flag);
 		else
-			reg[ REG_FLAGS ] &= ~(1 << flag);
+			reg[ REG_PSW ] &= ~(1 << flag);
 	}
 	void mathTempApply()
 	{
@@ -150,7 +150,7 @@ private:
 		if ( i )
 		{
 			mTag addr;
-			if ( r == REG_FLAGS )
+			if ( r == REG_PSW )
 				addr = fetch();
 			else
 				addr = reg[ r ];
@@ -239,11 +239,11 @@ public:
 	{
 		org = newOrg;
 	};
-	void op( mTag _dst, mTag _cmd, mTag _src, mTag _cond = COND_ALWAYS, int addr = -1 )
+	void op( mTag _cmd, mTag _r, mTag _y, mTag _x, int addr = -1 )
 	{	
 		if ( addr == -1 )
 			addr = org++;
-		machine->mem[ addr ] = machine->instr.encode( _dst, _cmd, _src, _cond );
+		machine->mem[ addr ] = machine->instr.encode( _cmd, _r, _y, _x );
 	};
 	void data( mWord _data, int addr = -1 )
 	{
