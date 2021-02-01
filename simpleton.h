@@ -145,21 +145,23 @@ private:
 		setFlag( FLAG_CARRY, tmp & 0x10000 );
 		setFlag( FLAG_ZERO, a == 0 );
 	}
-	mTag read( mTag r, mTag i )
+	mWord read( mTag r, mTag i )
 	{
 		if ( i )
 		{
-			mTag addr;
+			mWord addr;
 			if ( r == REG_PSW )
 				addr = fetch();
 			else
 				addr = reg[ r ];
 			if ( (r == REG_PC) || (r == REG_SP) )
 				reg[ r ]++;
+			//std::cout << "addr:" << addr << " read:" << getMem( addr ) << "\n";
 			return getMem( addr );
 		}
 		else
 		{
+			//std::cout << "reg:" << r << " read:" << reg[ r ] << "\n";
 			return reg[ r ];
 		}
 	}

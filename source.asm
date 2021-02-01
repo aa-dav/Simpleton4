@@ -1,6 +1,11 @@
 PORT_CONSOLE    = $FFFF
 
-	addis r0 100 0
-	addis r1 r0 1
-	add r3 r0 r1
-	addis [ $20 ] r0 -1
+	addis [ var2 ] $FFF0
+	addis [ var3 ] $0000
+	xor [ var1 ] [ var2 ] [ var3 ]
+
+	org $30
+
+var1	dw 0
+var2	dw 0
+var3	dw 0

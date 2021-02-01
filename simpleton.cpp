@@ -62,7 +62,8 @@ void Machine::step()
 		x = read( instr.x, instr.xi );
 	}
 	y = read( instr.y, instr.yi );
-	
+
+	//std::cout << "cmd:" << instr.cmd << " y:" << y << " x:" << x << "\n";
 	// ALU
 	tmp = 0;
 	switch ( instr.cmd )	// combined opcode
@@ -70,6 +71,7 @@ void Machine::step()
 	case OP_ADDIS:	// addis
 	case OP_ADDS:	// adds
 			a = y + x;
+			//std::cout << "acc:" << a << "\n";
 			break;
 	case OP_ADD:	// add
 	case OP_ADDI:	// addi
@@ -87,12 +89,15 @@ void Machine::step()
 	case OP_SBC:	// sbc
 			tmp = y - x - (getFlag( FLAG_CARRY ) ? 1 : 0);
 			mathTempApply();
+			break;
 	case OP_AND:	// and
 			tmp = x & y;
 			mathTempApply();
+			break;
 	case OP_OR:	// or
 			tmp = x | y;
 			mathTempApply();
+			break;
 	case OP_XOR:	// xor
 			tmp = x ^ y;
 			mathTempApply();
@@ -128,13 +133,14 @@ void Machine::step()
 	// store
 	if ( instr.ri )
 	{
-		mTag addr;
+		mWord addr;
 		if ( instr.r == REG_SP )
 			reg[ instr.r ]--;
 		if ( instr.r == REG_PSW )
 			addr = fetch();
 		else
 			addr = reg[ instr.r ];
+		//std::cout << "addr:" << addr << " writ:" << a << "\n";
 		setMem( addr, a );
 	}
 	else
@@ -203,6 +209,8 @@ void Assembler::parseStart()
 
 	identifiers[ "addi" ]		= Identifier( Identifier::Command, OP_ADDI );
 	identifiers[ "addis" ]		= Identifier( Identifier::Command, OP_ADDIS );
+
+	identifiers[ "move" ]		= Identifier( Identifier::Command, OP_ADDIS );	// shortcut for addis 0
 	
 	identifiers[ "add" ]		= Identifier( Identifier::Command, OP_ADD );
 	identifiers[ "adds" ]		= Identifier( Identifier::Command, OP_ADDS );
@@ -676,19 +684,19 @@ void Assembler::parseLine( const std::string &line )
 	{
 		data( emitX );
 		if ( !fwdX.empty() )
-			forwards.emplace_back( fwdX, org, lineNum );
+			forwards.emplace_back( fwdX, org - 1, lineNum );
 	}
 	if ( emitY != -1 )
 	{
 		data( emitY );
 		if ( !fwdY.empty() )
-			forwards.emplace_back( fwdY, org, lineNum );
+			forwards.emplace_back( fwdY, org - 1, lineNum );
 	}
 	if ( emitR != -1 )
 	{
 		data( emitR );
 		if ( !fwdR.empty() )
-			forwards.emplace_back( fwdR, org, lineNum );
+			forwards.emplace_back( fwdR, org - 1, lineNum );
 	}
 
 }
