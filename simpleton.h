@@ -95,13 +95,7 @@ struct Instruction
 	{
 		return (_cmd << 12) | (_r << 8) | (_y << 4) | (_x << 0);
 	};
-
-	void show( int addr )
-	{
-		std::cout << "x:" << (int) x << " xi:" << (int) xi << " y:" << (int) y << " yi:" << (int) yi << 
-			" r:" << (int) r << " ri:" << (int) ri << " cmd:" << (int) cmd << " at addr:" << addr << "\n";
-	};
-
+	
 	static bool isInplaceImmediate( mTag cmd );
 };
 
@@ -159,10 +153,17 @@ public:
 	{
 		return mem[ reg[ REG_PC ] ];
 	}
+	mWord getPC()
+	{
+		return reg[ REG_PC ];
+	}
 
 	void reset();
 	void step();
 	void show();
+
+	void showOperand( mTag r, mTag i, int &addr );
+	void showDisasm( int addr );
 
 	friend class Assembler;
 };

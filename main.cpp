@@ -9,7 +9,10 @@ int main( int argc, char *argv[] )
 	{
 		//m.show();
 		while ( m.currentOp() != 0 )	// nop as stop
+		{
+			//m.showDisasm( m.getPC() );
 			m.step();
+		}
 		m.show();
 	}
 	else

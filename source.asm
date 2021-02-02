@@ -1,13 +1,19 @@
 PORT_CONSOLE    = $FFFF
 
-	move r0 var1
-	move r1 10
-loop	movet [ r0 ] r1
-	jz exit
-	addi r0 r0 1
-	addi r1 r1 -1
-	move pc loop
-exit	dw 0
+		move sp $70	; Setup stack
 
-	org $30
-var1	dw 0
+		move r0 str0
+		call str_print
+		move r0 str0
+		call str_print
+		dw 0 ; STOP
+
+str_print	movet r1 [ r0 ]
+		jz .exit
+		move [ PORT_CONSOLE ] r1
+		addi r0 r0 1
+		move pc str_print
+.exit		ret
+
+
+str0		dw "Hello, world!" 10 0

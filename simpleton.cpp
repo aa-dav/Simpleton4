@@ -9,6 +9,79 @@ namespace Simpleton
 	return (cmd == OP_ADDI) || (cmd == OP_ADDIS) || (cmd == OP_RRCI);
 }
 
+static const char *NameCmds[] = {
+"ADDIS",
+"ADDI ",
+"ADDS ",
+"ADD  ",
+"ADC  ",
+"SUB  ",
+"SBC  ",
+"AND  ",
+"OR   ",
+"XOR  ",
+"CMP  ",
+"CADD ",
+"RRCI ",
+"RRC  " };
+
+static const char *NameRegs[] = {
+" R0",
+" R1",
+" R2",
+" R3",
+" R4",
+" SP",
+" PC",
+" PW",
+"*R0",
+"*R1",
+"*R2",
+"*R3",
+"*R4",
+"*SP",
+"*PC",
+"*PW"
+};
+
+void Machine::showOperand( mTag r, mTag i, int &addr )
+{
+	if ( (i == 1) && (r == REG_PC) )
+	{
+		std::cout << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << getMem( addr++ );
+	}
+	else if ( (i == 1) && (r == REG_PSW) )
+	{
+		std::cout << "[" << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << getMem( addr++ ) << "]";
+	}
+	else
+	{
+		std::cout << NameRegs[ i * 8 + r ];
+	}
+};
+
+void Machine::showDisasm( int addr )
+{
+	Instruction instr;
+	std::cout << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << addr  << ": ";
+	instr.decode( getMem( addr++ ) );
+	std::cout << NameCmds[ instr.cmd ] << " ";
+	if ( instr.isInplaceImmediate( instr.cmd ) )
+	{
+		std::cout << (int) ((instr.xi == 1) ? instr.x - 8 : instr.x);
+	}
+	else
+	{
+		showOperand( instr.x, instr.xi, addr );
+	}
+	std::cout << " , ";
+	showOperand( instr.y, instr.yi, addr );
+	std::cout << " -> ";
+	showOperand( instr.r, instr.ri, addr );
+	std::cout << "\n";
+};
+
+
 void Machine::reset()
 {
 	for ( int i = 0; i < 65536; i++ )
@@ -73,7 +146,6 @@ void Machine::step()
 	mWord cond;
 	// fetch & decode instruction
 	instr.decode( fetch() );
-	//instr.show( reg[ REG_PC ] - 1 );
 
 	// read x
 	if ( instr.isInplaceImmediate( instr.cmd ) )
@@ -276,7 +348,7 @@ void Assembler::parseEnd()
 			int offs = (iden.value & 0xFFFF) - fwd.addr - 1;
 			if ( (offs < -4096) || (offs > 4095) )
 				throw ParseError( fwd.lineNum, "conditional jump offset is too big (" + std::to_string( offs ) + ")!" );
-			machine->mem[ fwd.addr ] |= (iden.value & 0x1FFF);
+			machine->mem[ fwd.addr ] |= (offs & 0x1FFF);
 		}
 		else
 			machine->mem[ fwd.addr ] = iden.value;
