@@ -101,6 +101,8 @@ struct Instruction
 		std::cout << "x:" << (int) x << " xi:" << (int) xi << " y:" << (int) y << " yi:" << (int) yi << 
 			" r:" << (int) r << " ri:" << (int) ri << " cmd:" << (int) cmd << " at addr:" << addr << "\n";
 	};
+
+	static bool isInplaceImmediate( mTag cmd );
 };
 
 class ParseError
@@ -132,7 +134,7 @@ private:
 	{
 		return (reg[ REG_PSW ] & (1 << flag)) != 0;
 	}
-	void setFlag( mTag flag, mTag value ) 
+	void setFlag( mTag flag, bool value ) 
 	{
 		if ( value )
 			reg[ REG_PSW ] |= (1 << flag);
@@ -143,28 +145,9 @@ private:
 	{
 		a = tmp & 0xFFFF;
 		setFlag( FLAG_CARRY, (tmp & 0x10000) != 0 );
-		setFlag( FLAG_ZERO, a == 0 );
+		setFlag( FLAG_ZERO, (a == 0) );
 	}
-	mWord read( mTag r, mTag i )
-	{
-		if ( i )
-		{
-			mWord addr;
-			if ( r == REG_PSW )
-				addr = fetch();
-			else
-				addr = reg[ r ];
-			if ( (r == REG_PC) || (r == REG_SP) )
-				reg[ r ]++;
-			//std::cout << "addr:" << addr << " read:" << getMem( addr ) << "\n";
-			return getMem( addr );
-		}
-		else
-		{
-			//std::cout << "reg:" << r << " read:" << reg[ r ] << "\n";
-			return reg[ r ];
-		}
-	}
+	mWord read( mTag r, mTag i );
 
 public:
 	Machine()
@@ -191,11 +174,10 @@ private:
 	{
 		enum Type
 		{
-			Keyword,
 			Register,
 			Symbol,
 			Command,
-			Condition
+			CondBranch
 		};
 		
 		Type type;
@@ -211,9 +193,10 @@ private:
 		std::string name;
 		mWord addr;
 		int lineNum;
+		bool cadd = false;
 		ForwardReference() {};
-		ForwardReference( const std::string _name, mWord _addr, int _lineNum ): name( _name ), addr( _addr ), lineNum( _lineNum ) {};
-		ForwardReference( const ForwardReference &src ): name( src.name ), addr( src.addr ), lineNum( src.lineNum ) {};
+		ForwardReference( const std::string _name, mWord _addr, int _lineNum, bool _cadd = false ): name( _name ), addr( _addr ), lineNum( _lineNum ), cadd( _cadd ) {};
+		ForwardReference( const ForwardReference &src ): name( src.name ), addr( src.addr ), lineNum( src.lineNum ), cadd( src.cadd ) {};
 	};
 
 	Machine		*machine;

@@ -4,6 +4,11 @@
 namespace Simpleton
 {
 
+/*static*/ bool Instruction::isInplaceImmediate( mTag cmd )
+{
+	return (cmd == OP_ADDI) || (cmd == OP_ADDIS) || (cmd == OP_RRCI);
+}
+
 void Machine::reset()
 {
 	for ( int i = 0; i < 65536; i++ )
@@ -42,15 +47,36 @@ void Machine::setMem( mWord addr, mWord data )
 	}
 };
 
+mWord Machine::read( mTag r, mTag i )
+{
+	if ( i )
+	{
+		mWord addr;
+		if ( r == REG_PSW )
+			addr = fetch();
+		else
+			addr = reg[ r ];
+		if ( (r == REG_PC) || (r == REG_SP) )
+			reg[ r ]++;
+		//std::cout << "addr:" << addr << " read:" << getMem( addr ) << "\n";
+		return getMem( addr );
+	}
+	else
+	{
+		//std::cout << "reg:" << r << " read:" << reg[ r ] << "\n";
+		return reg[ r ];
+	}
+}
+
 void Machine::step()
 {
 	mWord cond;
 	// fetch & decode instruction
 	instr.decode( fetch() );
-	instr.show( reg[ REG_PC ] - 1 );
+	//instr.show( reg[ REG_PC ] - 1 );
 
 	// read x
-	if ( (instr.cmd == OP_ADDI) || (instr.cmd == OP_ADDIS) || (instr.cmd == OP_RRCI) )
+	if ( instr.isInplaceImmediate( instr.cmd ) )
 	{
 		if ( instr.xi )
 			x = 0xFFF8 | instr.x;
@@ -119,10 +145,12 @@ void Machine::step()
 				((cond == COND_NCARRY) && (!getFlag( FLAG_CARRY ))) )
 			{
 				a = y + x;
+				//std::cout << "COND:" << a << "\n";
 			}
 			else
 			{
 				a = y;
+				//std::cout << "NOT COND:" << a << "\n";
 			}
 			break;
 	case OP_RRCI:	//
@@ -208,10 +236,7 @@ void Assembler::parseStart()
 	identifiers[ "psw" ]		= Identifier( Identifier::Register, REG_PSW );
 
 	identifiers[ "addi" ]		= Identifier( Identifier::Command, OP_ADDI );
-	identifiers[ "addis" ]		= Identifier( Identifier::Command, OP_ADDIS );
-
-	identifiers[ "move" ]		= Identifier( Identifier::Command, OP_ADDIS );	// shortcut for addis
-	
+	identifiers[ "addis" ]		= Identifier( Identifier::Command, OP_ADDIS );	
 	identifiers[ "add" ]		= Identifier( Identifier::Command, OP_ADD );
 	identifiers[ "adds" ]		= Identifier( Identifier::Command, OP_ADDS );
 	identifiers[ "adc" ]		= Identifier( Identifier::Command, OP_ADC );
@@ -224,6 +249,14 @@ void Assembler::parseStart()
 	identifiers[ "cadd" ]		= Identifier( Identifier::Command, OP_CADD );
 	identifiers[ "rrci" ]		= Identifier( Identifier::Command, OP_RRCI );
 	identifiers[ "rrc" ]		= Identifier( Identifier::Command, OP_RRC );
+
+	identifiers[ "move" ]		= Identifier( Identifier::Command, OP_ADDIS );	// shortcut for addis (move)
+	identifiers[ "movet" ]		= Identifier( Identifier::Command, OP_ADDI );	// shortcut for addi (move with test)
+
+	identifiers[ "jz" ]		= Identifier( Identifier::CondBranch, COND_ZERO );
+	identifiers[ "jnz" ]		= Identifier( Identifier::CondBranch, COND_NZERO );
+	identifiers[ "jc" ]		= Identifier( Identifier::CondBranch, COND_CARRY );
+	identifiers[ "jnc" ]		= Identifier( Identifier::CondBranch, COND_NCARRY );
 
 	forwards.clear();
 }
@@ -238,7 +271,15 @@ void Assembler::parseEnd()
 		Identifier &iden = it->second;
 		if ( iden.type != Identifier::Symbol )
 			throw ParseError( fwd.lineNum, "forward reference '" + fwd.name + "' is not symbol!" );
-		machine->mem[ fwd.addr ] = iden.value;
+		if ( fwd.cadd )
+		{
+			int offs = (iden.value & 0xFFFF) - fwd.addr - 1;
+			if ( (offs < -4096) || (offs > 4095) )
+				throw ParseError( fwd.lineNum, "conditional jump offset is too big (" + std::to_string( offs ) + ")!" );
+			machine->mem[ fwd.addr ] |= (iden.value & 0x1FFF);
+		}
+		else
+			machine->mem[ fwd.addr ] = iden.value;
 	};
 }
 
@@ -368,7 +409,7 @@ mWord Assembler::parseConstExpr( const std::string &expr, int addrForForward )
 	int value = 0;
 	if ( expr.empty() )
 		throw ParseError( lineNum, "constexpr expected!" );
-	if ( (expr[ 0 ] == '$') || isdigit( expr[ 0 ] ) )
+	if ( (expr[ 0 ] == '$') || isdigit( expr[ 0 ] ) || ( expr[ 0 ] == '-' ) )
 	{
 		// Literal
 		if ( expr[ 0 ] == '$' )
@@ -403,14 +444,12 @@ mWord Assembler::parseConstExpr( const std::string &expr, int addrForForward )
 void Assembler::parseLine( const std::string &line )
 {
 	bool indirect = false;
-	const int noEmit = -100000;
-	int emitX = noEmit;
-	int emitY = noEmit;
-	int emitR = noEmit;
+	int emitX = 0;
+	int emitY = 0;
+	int emitR = 0;
 	int stage = 0;
 	int r = -1, x = -1, y = -1, cmd = -1, cond = -1;
 	std::string fwdR, fwdX, fwdY;
-	bool inpImm = false; // inplace immediate mode
 	bool emitForCall = false;
 
 	lineNum++;
@@ -498,7 +537,7 @@ void Assembler::parseLine( const std::string &line )
 			}
 			else if ( stage == 3 )
 			{
-				if ( inpImm && indirect )
+				if ( Instruction::isInplaceImmediate( cmd ) && indirect )
 					throw ParseError( lineNum, "Inplace immediate cannot be indirect!" );
 				emitX = value;
 				x = indirect ? IND_IMMED : IMMED;
@@ -522,7 +561,6 @@ void Assembler::parseLine( const std::string &line )
 			if ( stage != 0 )
 				throw ParseError( lineNum, "RET in wrong place!" );
 			cmd = OP_ADDIS;
-			inpImm = true;
 			r = REG_PC;
 			y = IND_SP;
 			x = IMMED;
@@ -535,7 +573,6 @@ void Assembler::parseLine( const std::string &line )
 				throw ParseError( lineNum, "CALL in wrong place!" );
 			emitForCall = true;
 			cmd = OP_ADDIS;
-			inpImm = true;
 			r = REG_PC;
 			stage = 2;
 		}
@@ -559,14 +596,14 @@ void Assembler::parseLine( const std::string &line )
 					}
 					else if ( stage == 3 )
 					{
-						if ( inpImm && indirect )
+						if ( Instruction::isInplaceImmediate( cmd ) && indirect )
 							throw ParseError( lineNum, "Inplace immediate cannot be indirect!" );
 						emitX = iden.value;
 						x = indirect ? IND_IMMED : IMMED;
 					}
 					else
 					{
-						throw ParseError( lineNum, "literal '" + lexem + "' at wrong place!" );
+						throw ParseError( lineNum, "symbol '" + lexem + "' at wrong place!" );
 					};
 				}
 				else if ( iden.type == Identifier::Register )
@@ -581,7 +618,7 @@ void Assembler::parseLine( const std::string &line )
 					}
 					else if ( stage == 3 )
 					{
-						if ( inpImm )
+						if ( Instruction::isInplaceImmediate( cmd ) )
 							throw ParseError( lineNum, "Inplace immediate cannot be register!" );
 						x = iden.value + (indirect ? 8 : 0);
 					}
@@ -595,13 +632,21 @@ void Assembler::parseLine( const std::string &line )
 					if ( stage == 0 )
 					{
 						cmd = iden.value;
-						if ( (cmd == OP_ADDI) || (cmd == OP_ADDIS) || (cmd == OP_RRCI) )
-							inpImm = true;	// detect inplace immediate mode for simplicity
 					}
 					else
 					{
 						throw ParseError( lineNum, "command '" + lexem + "' at wrong place!" );
 					}
+				}
+				else if ( iden.type == Identifier::CondBranch )
+				{
+					if ( stage != 0 )
+						throw ParseError( lineNum, " conditional branch '" + lexem + "' at wrong place!" );
+					cmd = OP_CADD;
+					r = REG_PC;
+					y = REG_PC;
+					stage = 2;
+					cond = iden.value;
 				}
 				else
 				{
@@ -630,7 +675,7 @@ void Assembler::parseLine( const std::string &line )
 				}
 				else
 				{
-					throw ParseError( lineNum, "unknown literal '" + lexem + "' at wrong place!" );
+					throw ParseError( lineNum, "unknown symbol '" + lexem + "' at wrong place!" );
 				};
 			}
 			stage++;
@@ -653,32 +698,51 @@ void Assembler::parseLine( const std::string &line )
 		emitX = 0;
 	};
 
-	if ( inpImm )
+	if ( Instruction::isInplaceImmediate( cmd ) )
 	{
 		// inplace immediate mode
 		if ( (emitX < -8) || (emitX > +7) )
 			throw ParseError( lineNum, "Inplace immediate X is too big!" );
 		x = emitX & 0b1111;
-		emitX = noEmit;
 	}
+
 	if ( emitForCall )
 		op( OP_ADDIS, IND_SP, REG_PC, 2 );
 
 	op( cmd, r, y, x );
+
 	// immediates...
-	if ( emitX != noEmit )
+	if ( !Instruction::isInplaceImmediate( cmd ) && ((x == IMMED) || (x == IND_IMMED)) )
 	{
-		data( emitX );
-		if ( !fwdX.empty() )
-			forwards.emplace_back( fwdX, org - 1, lineNum );
+		if ( cond != -1 )
+		{
+			if ( !fwdX.empty() )
+			{
+				data( (cond << 13) ); // place condition
+				forwards.emplace_back( fwdX, org - 1, lineNum, true ); // conditional forward!!!
+			}
+			else
+			{
+				int offs = (emitX & 0xFFFF) - org - 1;
+				if ( (offs < -4096) || (offs > 4095) )
+					throw ParseError( lineNum, "conditional jump offset is too big (" + std::to_string( offs ) + ")!" );
+				data( (cond << 13) | (offs & 0x1FFF) );
+			}
+		}
+		else
+		{
+			data( emitX );
+			if ( !fwdX.empty() )
+				forwards.emplace_back( fwdX, org - 1, lineNum );
+		}
 	}
-	if ( emitY != noEmit )
+	if ( (y == IMMED) || (y == IND_IMMED) )
 	{
 		data( emitY );
 		if ( !fwdY.empty() )
 			forwards.emplace_back( fwdY, org - 1, lineNum );
 	}
-	if ( emitR != noEmit )
+	if ( r == IND_IMMED )
 	{
 		data( emitR );
 		if ( !fwdR.empty() )
