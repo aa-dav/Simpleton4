@@ -1,7 +1,6 @@
 #include "simpleton.h"
 #include <conio.h>
 
-
 namespace Simpleton
 {
 
