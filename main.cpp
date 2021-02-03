@@ -1,5 +1,6 @@
 #include "simpleton.h"
 
+
 int main( int argc, char *argv[] )
 {
 	Simpleton::Machine m;

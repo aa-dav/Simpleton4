@@ -1,5 +1,6 @@
 PORT_CONSOLE    = $FFFF
 
+
 		move sp $70	; Setup stack
 
 		move r0 str0
