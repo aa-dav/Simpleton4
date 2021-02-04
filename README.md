@@ -42,20 +42,20 @@ add r0 r0 (label + 4 * offset)	; compile-time expression
 ```
 
 There are 16 ALU operations possible. Next opcodes are in use right now:
-- 00 - ADDI - add Y with INPLACE immediate in XI+X
-- 01 - ADDIS - add Y with INPLACE immediate in XI+X silent (doesn't update flags!)
-- 02 - ADDS - add silent (doesn't update flags)
-- 03 - ADD - add
-- 04 - ADC - add with carry
-- 05 - SUB - sub
-- 06 - SBC - sub with carry
-- 07 - AND - and
-- 08 - OR - or
-- 09 - XOR - xor
-- 0A - CMP - compare (as if Y - X) Always returns Y from ALU, so it works as usual CMP in form: cmp a a b, but can have more tricky behaviour if R <> Y.
-- 0B - CADD - conditional add. never updates flags. (see below!)
-- 0C - RRCI - rotate Y right (cyclic) by INPLACE immediate bit, carry gets last rotated bit
-- 0D - RRC - rotate Y right (cyclic) by X bit, carry gets last rotated bit
+- 00 **ADDI** - add Y with INPLACE immediate in XI+X
+- 01 **ADDIS** - add Y with INPLACE immediate in XI+X silent (doesn't update flags!)
+- 02 **ADDS** - add silent (doesn't update flags)
+- 03 **ADD** - add
+- 04 **ADC** - add with carry
+- 05 **SUB** - sub
+- 06 **SBC** - sub with carry
+- 07 **AND** - and
+- 08 **OR** - or
+- 09 **XOR** - xor
+- 0A **CMP** - compare (as if Y - X) Always returns Y from ALU, so it works as usual CMP in form: cmp a a b, but can have more tricky behaviour if R <> Y.
+- 0B **CADD** - conditional add. never updates flags. (see below!)
+- 0C **RRCI** - rotate Y right (cyclic) by INPLACE immediate bit, carry gets last rotated bit
+- 0D **RRC** - rotate Y right (cyclic) by X bit, carry gets last rotated bit
 
 ## NOTES:
 
@@ -87,7 +87,12 @@ JNZ LABEL
 addis sp pc 2 		; precalculate return address
 move pc proc_address
 ```
+There is shortcut for this in asssembler in usual form:
+```
+call proc_address
+```
 So, it's two instructions and 3 words. This is the most visible penalty of unified instruction format.
+
 5. But RET is just:
 ```
 move pc [ sp ] ; one-word addis instruction
