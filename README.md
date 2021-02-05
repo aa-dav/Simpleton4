@@ -14,6 +14,7 @@ There are eight registers R0-R7 and 128Kb of 65636 16-bit memory cells.
 
 So, instruction opcode is 16-bit wide too. There is the only one instruction format:
 ![Instruction format picture](https://gamedev.ru/files/images/simpleton4.png)
+
 (Attention! This picture is wrong in bit's enumeration: it's opposite - the most left bit is 15th and the most right is the 0th)
 
 Every instruction do the only one thing: takes two operands X and Y, writes them into ALU with operation code (INSTR) and writes result to the destination R. Even calls or conditional jumps do nothing but this.
@@ -71,7 +72,7 @@ move [ r3 ] [ 100 ]
 2. writing immediate in PC is JUMP and adding (silent) PC with immediate is relative JUMP:
 ```
 move pc address		; jump
-adds pc pc address	; relative jump
+adds pc pc offset	; relative jump
 ```
 3. conditional add is the key to the conditional branching, it works in this way: X argument (16 bit) is decoupled in two parts: upper 3 bits are conditional code and lower 13 bits are sign-extended to 16 bit of -4096..+4095 addendum. That is condition code is not part of opcode, but part of data! If condition is false - ALU skips addition and returns Y without changes.
 So, to implement conditional branching we just do:
