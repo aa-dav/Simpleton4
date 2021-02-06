@@ -26,59 +26,60 @@ static const char *NameCmds[] = {
 "RRC  " };
 
 static const char *NameRegs[] = {
-" R0",
-" R1",
-" R2",
-" R3",
-" R4",
-" SP",
-" PC",
-" PW",
-"*R0",
-"*R1",
-"*R2",
-"*R3",
-"*R4",
-"*SP",
-"*PC",
-"*PW"
+"R0",
+"R1",
+"R2",
+"R3",
+"R4",
+"SP",
+"PC",
+"PW",
+"[ R0 ]",
+"[ R1 ]",
+"[ R2 ]",
+"[ R3 ]",
+"[ R4 ]",
+"[ SP ]",
+"[ PC ]",
+"[ PW ]"
 };
 
-void Machine::showOperand( mTag r, mTag i, int &addr )
+std::string Machine::operandToStr( mTag r, mTag i, int &addr )
 {
+	std::stringstream ss;
 	if ( (i == 1) && (r == REG_PC) )
 	{
-		std::cout << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << getMem( addr++ );
+		ss << "$" << std::uppercase << std::hex << getMem( addr++ );
 	}
 	else if ( (i == 1) && (r == REG_PSW) )
 	{
-		std::cout << "[" << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << getMem( addr++ ) << "]";
+		ss << "[ $" << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << getMem( addr++ ) << " ]";
 	}
 	else
 	{
-		std::cout << NameRegs[ i * 8 + r ];
+		ss << NameRegs[ i * 8 + r ];
 	}
+	return ss.str();
 };
 
 void Machine::showDisasm( int addr )
 {
 	Instruction instr;
+	std::string sr, sy, sx;
 	std::cout << std::uppercase << std::hex << std::setw( 4 ) << std::setfill( '0' ) << addr  << ": ";
 	instr.decode( getMem( addr++ ) );
 	std::cout << NameCmds[ instr.cmd ] << " ";
 	if ( instr.isInplaceImmediate( instr.cmd ) )
 	{
-		std::cout << (int) ((instr.xi == 1) ? instr.x - 8 : instr.x);
+		sx = std::to_string( (int) ((instr.xi == 1) ? instr.x - 8 : instr.x) );
 	}
 	else
 	{
-		showOperand( instr.x, instr.xi, addr );
+		sx = operandToStr( instr.x, instr.xi, addr );
 	}
-	std::cout << " , ";
-	showOperand( instr.y, instr.yi, addr );
-	std::cout << " -> ";
-	showOperand( instr.r, instr.ri, addr );
-	std::cout << "\n";
+	sy = operandToStr( instr.y, instr.yi, addr );
+	sr = operandToStr( instr.r, instr.ri, addr );
+	std::cout << sr << " " << sy << " " << sx << "\n";
 };
 
 

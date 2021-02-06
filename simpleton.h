@@ -162,7 +162,7 @@ public:
 	void step();
 	void show();
 
-	void showOperand( mTag r, mTag i, int &addr );
+	std::string operandToStr( mTag r, mTag i, int &addr );
 	void showDisasm( int addr );
 
 	friend class Assembler;
