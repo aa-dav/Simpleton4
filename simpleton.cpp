@@ -204,8 +204,9 @@ void Machine::step()
 	case OP_CMP:	// cmp
 			a = y;	// to keep Y intact...
 			tmp = y - x;
-			setFlag( FLAG_CARRY, tmp & 0x10000 );
+			setFlag( FLAG_CARRY, (tmp & 0x10000) != 0 );
 			setFlag( FLAG_ZERO, (tmp & 0xFFFF) == 0 );
+			setFlag( FLAG_SIGN, (tmp & 0x8000) != 0 );
 			break;
 	case OP_CADD:	// conditional add
 			cond = (x >> 13) & 0b111;
@@ -215,7 +216,9 @@ void Machine::step()
 			if ( 	((cond == COND_ZERO) && (getFlag( FLAG_ZERO ))) ||
 				((cond == COND_NZERO) && (!getFlag( FLAG_ZERO ))) ||
 				((cond == COND_CARRY) && (getFlag( FLAG_CARRY ))) ||
-				((cond == COND_NCARRY) && (!getFlag( FLAG_CARRY ))) )
+				((cond == COND_NCARRY) && (!getFlag( FLAG_CARRY ))) ||
+				((cond == COND_SIGN) && (getFlag( FLAG_SIGN ))) ||
+				((cond == COND_NSIGN) && (!getFlag( FLAG_SIGN ))) )
 			{
 				a = y + x;
 				//std::cout << "COND:" << a << "\n";
@@ -555,10 +558,7 @@ mWord Assembler::parseConstExpr( const std::string &expr, int addrForForward )
 	return value;
 };
 
-void processArgument( const std::string &kind, const int stage, const bool indirect, const bool newSyntax, const int cmd, 
-			const int lineNum, const int value, const std::string &lexem, bool reg, const std::string &fwd,
-			int &emitR, int &emitY, int &emitX, int &r, int &y, int &x,
-			std::string &fwdR, std::string &fwdY, std::string &fwdX )
+void Assembler::processArgument( const std::string &kind, const std::string &lexem, const int value, bool reg, bool fwd )
 {
 	if (	(!newSyntax && (stage == 1)) ||
 		(newSyntax && (stage == 0)) )
@@ -570,7 +570,8 @@ void processArgument( const std::string &kind, const int stage, const bool indir
 				throw ParseError( lineNum, "R cannot be immediate!" );
 			emitR = value;
 			r = IND_IMMED;
-			fwdR = fwd;
+			if ( fwd )
+				fwdR = lexem;
 		}
 	}
 	else if (	(!newSyntax && (stage == 2)) ||
@@ -581,7 +582,8 @@ void processArgument( const std::string &kind, const int stage, const bool indir
 		} else {
 			emitY = value;
 			y = indirect ? IND_IMMED : IMMED;
-			fwdY = fwd;
+			if ( fwd )
+				fwdY = lexem;
 		}
 	}
 	else if (	(!newSyntax && (stage == 3)) ||
@@ -594,7 +596,8 @@ void processArgument( const std::string &kind, const int stage, const bool indir
 		} else {
 			emitX = value;
 			x = indirect ? IND_IMMED : IMMED;
-			fwdX = fwd;
+			if ( fwd )
+				fwdX = lexem;
 		}
 	}
 	else
@@ -605,17 +608,25 @@ void processArgument( const std::string &kind, const int stage, const bool indir
 
 void Assembler::parseLine( const std::string &line )
 {
-	bool indirect = false;
-	bool newSyntax = newSyntaxMode;
-	int emitX = 0;
-	int emitY = 0;
-	int emitR = 0;
-	int stage = 0;
-	int r = -1, x = -1, y = -1, cmd = -1, cond = -1;
 	bool invertX = false;
-	std::string fwdR, fwdX, fwdY;
 	bool emitForCall = false;
 	int eqSign = 0; // 0 - "=", 1 - "<=", 2 - "<-" in new syntax
+
+	// Preset common state variables...
+	indirect = false;
+	newSyntax = newSyntaxMode;
+	stage = 0;
+	cmd = -1; 
+	cond = -1;
+	emitX = 0;
+	emitY = 0;
+	emitR = 0;
+	r = -1; 
+	x = -1; 
+	y = -1; 
+	fwdR.clear();
+	fwdX.clear();
+	fwdY.clear();
 
 	lineNum++;
 	extractLexems( line );
@@ -711,9 +722,7 @@ void Assembler::parseLine( const std::string &line )
 			// Literal
 			int value = parseNumberLiteral( lexem );
 
-			processArgument( "literal", stage, indirect, newSyntax, cmd, 
-					lineNum, value, lexem, false, "",
-					emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
+			processArgument( "literal", lexem, value, false, false );
 
 			stage++;
 		}
@@ -776,15 +785,11 @@ void Assembler::parseLine( const std::string &line )
 			{
 				if ( iden->type == Identifier::Symbol )
 				{
-					processArgument( "symbol", stage, indirect, newSyntax, cmd, 
-							lineNum, iden->value, lexem, false, "",
-							emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
+					processArgument( "symbol", lexem, iden->value, false, false );
 				}
 				else if ( iden->type == Identifier::Register )
 				{
-					processArgument( "register", stage, indirect, newSyntax, cmd, 
-							lineNum, iden->value, lexem, true, "",
-							emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
+					processArgument( "register", lexem, iden->value, true, false );
 				}
 				else if ( iden->type == Identifier::Command )
 				{
@@ -838,9 +843,7 @@ void Assembler::parseLine( const std::string &line )
 			}
 			else
 			{
-				processArgument( "unknown symbol", stage, indirect, newSyntax, cmd, 
-						lineNum, 0, lexem, false, lexem,
-						emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
+				processArgument( "unknown symbol", lexem, 0, false, true );
 			}
 			stage++;
 		}

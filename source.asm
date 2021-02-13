@@ -20,7 +20,10 @@ start		r0 <- str0
 
 .inp_loop	r0 <= [ PORT_CONSOLE ]
 		jz .inp_loop
+		r0 = r0 ? $51
+		jz .exit
+
 		[ PORT_CONSOLE ] <- r0
 		pc <- .inp_loop
 
-		dw 0			; STOP
+.exit		dw 0			; STOP

@@ -48,8 +48,10 @@ const int COND_ZERO	=	0;
 const int COND_NZERO	=	1;
 const int COND_CARRY	=	2;
 const int COND_NCARRY	=	3;
-const int COND_GT	=	4;
-const int COND_GTE	=	5;
+const int COND_SIGN	=	4;
+const int COND_NSIGN	=	5;
+const int COND_GT	=	6;
+const int COND_GTE	=	7;
 
 const int OP_ADDIS	=	0x00;
 const int OP_ADDI	=	0x01;
@@ -220,6 +222,12 @@ private:
 	std::vector< Identifier >	identifiers;
 	std::vector< ForwardReference >	forwards;
 	bool newSyntaxMode = false;
+	// Current state of line parsing
+	bool newSyntax, indirect;
+	std::string fwdR, fwdY, fwdX;
+	int emitR, emitY, emitX, r, x, y, cmd, cond, stage;
+
+	void processArgument( const std::string &kind, const std::string &lexem, const int value, bool reg, bool fwd );
 
 	Identifier *findIdentifier( const std::string &name, bool newSyntex );
 	std::string extractNextLexem( const std::string &parseString, int &parsePos );
