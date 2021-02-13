@@ -227,7 +227,7 @@ private:
 	std::string fwdR, fwdY, fwdX;
 	int emitR, emitY, emitX, r, x, y, cmd, cond, stage;
 
-	void processArgument( const std::string &kind, const std::string &lexem, const int value, bool reg, bool fwd );
+	void processArgument( const std::string &kind, const std::string &lexem, const int reg, const int value, const bool fwd );
 
 	Identifier *findIdentifier( const std::string &name, bool newSyntex );
 	std::string extractNextLexem( const std::string &parseString, int &parsePos );
