@@ -555,6 +555,54 @@ mWord Assembler::parseConstExpr( const std::string &expr, int addrForForward )
 	return value;
 };
 
+void processArgument( const std::string &kind, const int stage, const bool indirect, const bool newSyntax, const int cmd, 
+			const int lineNum, const int value, const std::string &lexem, bool reg, const std::string &fwd,
+			int &emitR, int &emitY, int &emitX, int &r, int &y, int &x,
+			std::string &fwdR, std::string &fwdY, std::string &fwdX )
+{
+	if (	(!newSyntax && (stage == 1)) ||
+		(newSyntax && (stage == 0)) )
+	{
+		if ( reg ) {
+			r = value + (indirect ? 8 : 0);
+		} else {
+			if ( !indirect )
+				throw ParseError( lineNum, "R cannot be immediate!" );
+			emitR = value;
+			r = IND_IMMED;
+			fwdR = fwd;
+		}
+	}
+	else if (	(!newSyntax && (stage == 2)) ||
+			(newSyntax && (stage == 2)) )
+	{
+		if ( reg ) {
+			y = value + (indirect ? 8 : 0);
+		} else {
+			emitY = value;
+			y = indirect ? IND_IMMED : IMMED;
+			fwdY = fwd;
+		}
+	}
+	else if (	(!newSyntax && (stage == 3)) ||
+			(newSyntax && (stage == 4)) )
+	{
+		if ( Instruction::isInplaceImmediate( cmd ) && indirect )
+			throw ParseError( lineNum, "Inplace immediate cannot be indirect!" );
+		if ( reg ) {
+			x = value + (indirect ? 8 : 0);
+		} else {
+			emitX = value;
+			x = indirect ? IND_IMMED : IMMED;
+			fwdX = fwd;
+		}
+	}
+	else
+	{
+		throw ParseError( lineNum, kind + " '" + lexem + "' at wrong place!" );
+	};
+}
+
 void Assembler::parseLine( const std::string &line )
 {
 	bool indirect = false;
@@ -663,30 +711,10 @@ void Assembler::parseLine( const std::string &line )
 			// Literal
 			int value = parseNumberLiteral( lexem );
 
-			if (	(!newSyntax && (stage == 1) && indirect) ||
-				(newSyntax && (stage == 0) && indirect) )
-			{
-				emitR = value;
-				r = IND_IMMED;
-			}
-			else if (	(!newSyntax && (stage == 2)) ||
-					(newSyntax && (stage == 2)) )
-			{
-				emitY = value;
-				y = indirect ? IND_IMMED : IMMED;
-			}
-			else if (	(!newSyntax && (stage == 3)) ||
-					(newSyntax && (stage == 4)) )
-			{
-				if ( Instruction::isInplaceImmediate( cmd ) && indirect )
-					throw ParseError( lineNum, "Inplace immediate cannot be indirect!" );
-				emitX = value;
-				x = indirect ? IND_IMMED : IMMED;
-			}
-			else
-			{
-				throw ParseError( lineNum, "literal '" + lexem + "' at wrong place!" );
-			};
+			processArgument( "literal", stage, indirect, newSyntax, cmd, 
+					lineNum, value, lexem, false, "",
+					emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
+
 			stage++;
 		}
 		else if ( lexem == "=" )
@@ -748,54 +776,15 @@ void Assembler::parseLine( const std::string &line )
 			{
 				if ( iden->type == Identifier::Symbol )
 				{
-					if (	(!newSyntax && (stage == 1) && indirect) ||
-						(newSyntax && (stage == 0) && indirect) )
-					{
-						emitR = iden->value;
-						r = IND_IMMED;
-					}
-					else if (	(!newSyntax && (stage == 2)) ||
-							(newSyntax && (stage == 2)) )
-					{
-						emitY = iden->value;
-						y = indirect ? IND_IMMED : IMMED;
-					}
-					else if ( 	(!newSyntax && (stage == 3)) ||
-							(newSyntax && (stage == 4)) )
-					{
-						if ( Instruction::isInplaceImmediate( cmd ) && indirect )
-							throw ParseError( lineNum, "Inplace immediate cannot be indirect!" );
-						emitX = iden->value;
-						x = indirect ? IND_IMMED : IMMED;
-					}
-					else
-					{
-						throw ParseError( lineNum, "symbol '" + lexem + "' at wrong place!" );
-					};
+					processArgument( "symbol", stage, indirect, newSyntax, cmd, 
+							lineNum, iden->value, lexem, false, "",
+							emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
 				}
 				else if ( iden->type == Identifier::Register )
 				{
-					if ( 	(!newSyntax && (stage == 1)) ||
-						(newSyntax && (stage == 0)) )
-					{
-						r = iden->value + (indirect ? 8 : 0);
-					}
-					else if (	(!newSyntax && (stage == 2)) ||
-							(newSyntax && (stage == 2)) )
-					{
-						y = iden->value + (indirect ? 8 : 0);
-					}
-					else if (	(!newSyntax && (stage == 3)) ||
-							(newSyntax && (stage == 4)) )
-					{
-						if ( Instruction::isInplaceImmediate( cmd ) )
-							throw ParseError( lineNum, "Inplace immediate cannot be register!" );
-						x = iden->value + (indirect ? 8 : 0);
-					}
-					else
-					{
-						throw ParseError( lineNum, "register '" + lexem + "' at wrong place!" );
-					}
+					processArgument( "register", stage, indirect, newSyntax, cmd, 
+							lineNum, iden->value, lexem, true, "",
+							emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
 				}
 				else if ( iden->type == Identifier::Command )
 				{
@@ -808,31 +797,20 @@ void Assembler::parseLine( const std::string &line )
 						if ( newSyntax )
 						{
 							// corrections for eqSign
-							if ( eqSign == 1 )
-							{
-								if ( cmd == OP_ADD )
-								{
+							if ( eqSign == 1 ) {
+								if ( cmd == OP_ADD ) {
 									cmd = OP_ADDI;
-								}
-								else if ( cmd == OP_RRC )
-								{
+								} else if ( cmd == OP_RRC ) {
 									cmd = OP_RRCI;
-								}
-								else
+								} else
 									ParseError( lineNum, "'<=' is used with wrong operator '" + lexem + "'!" );
-							}
-							else if ( eqSign == 2 )
-							{
-								if ( cmd == OP_ADD )
-								{
+							} else if ( eqSign == 2 ) {
+								if ( cmd == OP_ADD ) {
 									cmd = OP_ADDIS;
-								}
-								else if ( cmd == OP_SUB )
-								{
+								} else if ( cmd == OP_SUB ) {
 									cmd = OP_ADDIS;
 									invertX = true;
-								}
-								else
+								} else
 									ParseError( lineNum, "'<-' is used with wrong operator '" + lexem + "'!" );
 							}
 						}
@@ -860,33 +838,9 @@ void Assembler::parseLine( const std::string &line )
 			}
 			else
 			{
-				// C 1 2 3
-				// 0 = 2 + 4
-				if ( 	(!newSyntax && (stage == 1) && indirect) ||
-					(newSyntax && (stage == 0) && indirect) )
-				{
-					emitR = 0;
-					fwdR = lexem;
-					r = IND_IMMED;
-				}
-				else if (	(!newSyntax && (stage == 2)) ||
-						(newSyntax && (stage == 2)) )
-				{
-					emitY = 0;
-					fwdY = lexem;
-					y = indirect ? IND_IMMED : IMMED;
-				}
-				else if (	(!newSyntax && (stage == 3)) ||
-						(newSyntax && (stage == 4)) )
-				{
-					emitX = 0;
-					fwdX = lexem;
-					x = indirect ? IND_IMMED : IMMED;
-				}
-				else
-				{
-					throw ParseError( lineNum, "unknown symbol '" + lexem + "' at wrong place!" );
-				};
+				processArgument( "unknown symbol", stage, indirect, newSyntax, cmd, 
+						lineNum, 0, lexem, false, lexem,
+						emitR, emitY, emitX, r, y, x, fwdR, fwdY, fwdX );
 			}
 			stage++;
 		}
@@ -989,6 +943,4 @@ bool Assembler::parseFile( const std::string &fileName )
 	return true;
 };
 
-
 }	// namespace Simpleton
-
