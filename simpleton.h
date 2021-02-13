@@ -140,6 +140,7 @@ private:
 		a = tmp & 0xFFFF;
 		setFlag( FLAG_CARRY, (tmp & 0x10000) != 0 );
 		setFlag( FLAG_ZERO, (a == 0) );
+		setFlag( FLAG_SIGN, (a & 0x8000) != 0 );
 	}
 	mWord read( mTag r, mTag i );
 
@@ -180,13 +181,21 @@ private:
 			Command,
 			CondBranch
 		};
+		enum Mode
+		{
+			AsmClassic,
+			AsmNew,
+			AsmBoth
+		};
 		
+		std::string name;
+		Mode mode;
 		Type type;
 		int value;
 
 		Identifier() {};
-		Identifier( Type _type, int _value ): type( _type ), value( _value ) {};
-		Identifier( const Identifier &src ): type( src.type ), value( src.value ) {};
+		Identifier( const std::string &_name, Type _type, int _value, Mode _mode ): name( _name ), type( _type ), value( _value ), mode( _mode ) {};
+		Identifier( const Identifier &src ): name( src.name ), type( src.type ), value( src.value ), mode( src.mode ) {};
 	};
 
 	struct ForwardReference
@@ -207,10 +216,12 @@ private:
 	std::string	lastLabel;
 	std::string	curLabel;
 	int		curLexem;
-	std::vector< std::string >		lexems;
-	std::map< std::string, Identifier >	identifiers;
-	std::vector< ForwardReference >		forwards;
+	std::vector< std::string >	lexems;
+	std::vector< Identifier >	identifiers;
+	std::vector< ForwardReference >	forwards;
+	bool newSyntaxMode = false;
 
+	Identifier *findIdentifier( const std::string &name, bool newSyntex );
 	std::string extractNextLexem( const std::string &parseString, int &parsePos );
 	void extractLexems( const std::string &parseString );
 	void parseLine( const std::string &line );
