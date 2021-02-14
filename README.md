@@ -145,7 +145,7 @@ If X is omitted it becomes literal '0' (zero).
 If 'op' is omitted it becomes '+' sign, so pseudoinstruction 'move' is not needed anymore (see below).
 Next instructions fulfill this pattern (example for R=R0, Y=R1 and X=[ label ]):
 ```
-02 - ADDS  - r0 = r1 +s [ label ] ; add silent (doesn't update flags)
+02 - ADDS - r0 = r1 +s [ label ] ; add silent (doesn't update flags)
 03 - ADD  - r0 = r1 +  [ label ] ; add
 04 - ADC  - r0 = r1 +c [ lavel ] ; add with carry
 05 - SUB  - r0 = r1 -  [ label ] ; sub
