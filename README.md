@@ -13,10 +13,7 @@ Second: memory and registers are 16-bit wide for simplicity.
 There are eight registers R0-R7 and 128Kb of 65636 16-bit memory cells.
 
 So, instruction opcode is 16-bit wide too. There is the only one instruction format:
-![Instruction format picture](https://gamedev.ru/files/images/simpleton4.png)
-
-Attention! This picture is wrong in bit's enumeration: it's opposite - the most left bit is 15th and the most right is the 0th.
-Actual placement of fields in opcode is: IRYX (hexadecimal), there I is instruction code, and R, Y and X are operands.
+![Instruction format picture](https://cdn.jpg.wtf/futurico/95/66/1613283583-9566e916e4b56fca243a37105c20898d.png)
 
 Every instruction do the only one thing: takes two operands X and Y, writes them into ALU with operation code (INSTR) and writes result to the destination R. Even calls or conditional jumps do nothing but this.
 Fields X, Y and R are registers codes 0-7. Plus bits of indirection (XI, YI, RI) which (if set) tell to work with memory cell registers points to. 4:4:4:4 bit format makes it easier to read machine codes as a result too.
@@ -139,4 +136,61 @@ str_print   movet r1 [ r0 ]
 
 str0      dw "Hello, world!" 10 0
 ```
-So, it outputs 'Hello, world!" string twice as planned.
+
+### New assembler syntax
+
+Assembler instructions 'mode classic' and 'mode new' can switch assembler back and forth new 'math notation'.
+Most of instructions could be expressed as 'R = Y op X' where 'op' is operation sign.
+If X is omitted it becomes literal '0' (zero).
+If 'op' is omitted it becomes '+' sign, so pseudoinstruction 'move' is not needed anymore (see below).
+Next instructions fulfill this pattern (example for R=R0, Y=R1 and X=[ label ]):
+```
+02 - ADDS  - r0 = r1 +s [ label ] ; add silent (doesn't update flags)
+03 - ADD  - r0 = r1 +  [ label ] ; add
+04 - ADC  - r0 = r1 +c [ lavel ] ; add with carry
+05 - SUB  - r0 = r1 -  [ label ] ; sub
+06 - SBC  - r0 = r1 -c [ label ] ; sub with carry
+07 - AND  - r0 = r1 &  [ label ] ; and
+08 - OR   - r0 = r1 |  [ label ] ; or
+09 - XOR  - r0 = r1 ^  [ label ] ; xor
+0A - CMP  - r0 = r1 ?  [ label ] ; compare (as Y - X), op updates flags and returns Y
+0B - CADD - r0 = r1 +? [ label ] ; conditional add. never updates flags.
+0D - RRC  - r0 = r1 >> [ label ] ; rotate Y right (cyclic) by X bits
+```
+But there are 3 opcodes (right now) which fall out of this pattern and have special syntax:
+```
+00 - ADDIS - r0 <- r1 - 1         ; add Y with INPLACE immediate in XI+X SILENT (flags are not updated)
+01 - ADDI  - r0 <= r1 + 3         ; add Y with INPLACE immediate in XI+X
+0C - RRCI  - r0 <= r1 >> 15       ; rotate Y right (cyclic) by INPLACE immediate bits
+```
+First of all - it's 'inplace immediate' commands: addi, addis and rcci. These of them who updates flags use '<=' as sign of this special case. 
+The only exceptions is 'addis' which uses '<-' to signal that it's not updates flags.
+
+Note, that 'addis a b -1' (negative inplace immediate) could be expressed in new syntax as 'a <- b + -1'. But also 'a <- b - 1' is correct (that is like 'sub' opcode). This is another reason for exclusion of addi(s) from regular '=' syntax.
+Also, 'move' is as simple as: 'a <- b' which is shortcut for 'a <- b + 0'.
+
+Note, that all pseudoops used for simplicity are still in place: 'jnz/call/ret' and so on.
+
+So, example above could be rewritten as:
+```
+            mode new
+
+PORT_CONSOLE    = $FFFF
+
+            sp <- $70       ; Setup stack
+
+            r0 <- str0      ; shortcut for addis r0 str0 0
+            call str_print
+            r0 <- str0
+            call str_print
+            dw 0 ; STOP
+
+str_print   r1 <= [ r0 ]           ; testing move (addi r1 [ r0 ] 0)
+            jz .exit           
+            [ PORT_CONSOLE ] <- r1 ; output char to console
+            r0 <- r0 + 1           ; increment r0
+            pc <- str_print        ; jump to the beginning of procedure
+.exit       ret                    ; shortcut for move pc [ sp ]
+
+str0        dw "Hello, world!" 10 0
+```
