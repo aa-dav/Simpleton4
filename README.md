@@ -15,7 +15,8 @@ There are eight registers R0-R7 and 128Kb of 65636 16-bit memory cells.
 So, instruction opcode is 16-bit wide too. There is the only one instruction format:
 ![Instruction format picture](https://gamedev.ru/files/images/simpleton4.png)
 
-(Attention! This picture is wrong in bit's enumeration: it's opposite - the most left bit is 15th and the most right is the 0th)
+Attention! This picture is wrong in bit's enumeration: it's opposite - the most left bit is 15th and the most right is the 0th.
+Actual placement of fields in opcode is: IRYX (hexadecimal), there I is instruction code, and R, Y and X are operands.
 
 Every instruction do the only one thing: takes two operands X and Y, writes them into ALU with operation code (INSTR) and writes result to the destination R. Even calls or conditional jumps do nothing but this.
 Fields X, Y and R are registers codes 0-7. Plus bits of indirection (XI, YI, RI) which (if set) tell to work with memory cell registers points to. 4:4:4:4 bit format makes it easier to read machine codes as a result too.
