@@ -62,10 +62,10 @@ There are 16 ALU operations possible. Next opcodes are in use right now:
 1. There is no separate MOVE opcode because it's ADDIS with 0 in XI+X:
 (inplace) immediate in X could be omitted in assembler syntax:
 ```
-addis r0 r1 1
-addis r0 r1 0 ;
-move [ r2 ] r1 		; There is shortcut syntax 'move' (addis [ r2 ] r1 0)
-move [ r3 ] [ 100 ]
+addis r0 r1 1 ; adding 1 to r1 and placing result to r0
+addis r0 r1 0 ; adding 0 to r1 and placing result (that is r1) to r0
+move [ r2 ] r1 		; Move from r1 to memory cell r2 points to (shortcut for addis [ r2 ] r1 0)
+move [ r3 ] [ 100 ]	; Move from memory cell with address 100 to r3
 ```
 2. writing immediate in PC is JUMP and adding (silent) PC with immediate is relative JUMP:
 ```
