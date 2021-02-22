@@ -145,23 +145,23 @@ If X is omitted it becomes literal '0' (zero).
 If 'op' is omitted it becomes '+' sign, so pseudoinstruction 'move' is not needed anymore (see below).
 Next instructions fulfill this pattern (example for R=R0, Y=R1 and X=[ label ]):
 ```
-02 - ADDS - r0 = r1 +s [ label ] ; add silent (doesn't update flags)
-03 - ADD  - r0 = r1 +  [ label ] ; add
-04 - ADC  - r0 = r1 +c [ lavel ] ; add with carry
-05 - SUB  - r0 = r1 -  [ label ] ; sub
-06 - SBC  - r0 = r1 -c [ label ] ; sub with carry
-07 - AND  - r0 = r1 &  [ label ] ; and
-08 - OR   - r0 = r1 |  [ label ] ; or
-09 - XOR  - r0 = r1 ^  [ label ] ; xor
-0A - CMP  - r0 = r1 ?  [ label ] ; compare (as Y - X), op updates flags and returns Y
-0B - CADD - r0 = r1 +? [ label ] ; conditional add. never updates flags.
-0D - RRC  - r0 = r1 >> [ label ] ; rotate Y right (cyclic) by X bits
+02 - ADDS : r0 = r1 +s [ label ] ; add silent (doesn't update flags)
+03 - ADD  : r0 = r1 +  [ label ] ; add
+04 - ADC  : r0 = r1 +c [ lavel ] ; add with carry
+05 - SUB  : r0 = r1 -  [ label ] ; sub
+06 - SBC  : r0 = r1 -c [ label ] ; sub with carry
+07 - AND  : r0 = r1 &  [ label ] ; and
+08 - OR   : r0 = r1 |  [ label ] ; or
+09 - XOR  : r0 = r1 ^  [ label ] ; xor
+0A - CMP  : r0 = r1 ?  [ label ] ; compare (as Y - X), op updates flags and returns Y
+0B - CADD : r0 = r1 +? [ label ] ; conditional add. never updates flags.
+0D - RRC  : r0 = r1 >> [ label ] ; rotate Y right (cyclic) by X bits
 ```
 But there are 3 opcodes (right now) which fall out of this pattern and have special syntax:
 ```
-00 - ADDIS - r0 <- r1 - 1         ; add Y with INPLACE immediate in XI+X SILENT (flags are not updated)
-01 - ADDI  - r0 <= r1 + 3         ; add Y with INPLACE immediate in XI+X
-0C - RRCI  - r0 <= r1 >> 15       ; rotate Y right (cyclic) by INPLACE immediate bits
+00 - ADDIS : r0 <- r1 - 1         ; add Y with INPLACE immediate in XI+X SILENT (flags are not updated)
+01 - ADDI  : r0 <= r1 + 3         ; add Y with INPLACE immediate in XI+X
+0C - RRCI  : r0 <= r1 >> 15       ; rotate Y right (cyclic) by INPLACE immediate bits
 ```
 First of all - it's 'inplace immediate' commands: addi, addis and rcci. These of them who updates flags use '<=' as sign of this special case. 
 The only exceptions is 'addis' which uses '<-' to signal that it's not updates flags.

@@ -7,10 +7,9 @@ int main( int argc, char *argv[] )
 
 	if ( a.parseFile( "source.asm" ) )
 	{
-		//m.show();
 		while ( m.currentOp() != 0 )	// nop as stop
 		{
-			//m.showDisasm( m.getPC() );
+			m.showDisasm( m.getPC() );
 			m.step();
 		}
 		m.show();

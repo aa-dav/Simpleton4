@@ -513,7 +513,7 @@ std::string Assembler::getNextLexem()
 
 bool lexemIsNumberLiteral( const std::string &lexem  )
 {
-	return (lexem[ 0 ] == '$') || isdigit( lexem[ 0 ] ) || ( lexem[ 0 ] == '-' );
+	return (lexem[ 0 ] == '$') || isdigit( lexem[ 0 ] ) || ( (lexem[ 0 ] == '-') && (lexem.size() > 1) );
 }
 
 int parseNumberLiteral( const std::string &lexem )
