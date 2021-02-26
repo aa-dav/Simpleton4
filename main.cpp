@@ -1,4 +1,4 @@
-#include "simpleton.h"
+#include "simpleton4asm.h"
 
 int main( int argc, char *argv[] )
 {
