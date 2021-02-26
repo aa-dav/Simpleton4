@@ -7,6 +7,11 @@ namespace Simpleton
 void Assembler::reset()
 {
 	org = 0;
+	files.clear();
+	lines.clear();
+	lexems.clear();
+	identifiers.clear();
+	forwards.clear();
 }
 
 void Assembler::parseStart()
@@ -156,7 +161,7 @@ std::string Assembler::extractNextLexem( const std::string &parseString, int &pa
 	return res;
 };
 
-void Assembler::extractLexems( const std::string &parseString )
+void Assembler::extractLexems( const std::string &parseString, bool processLabels )
 {
 	lexems.clear();
 	curLexem = 0;
@@ -168,7 +173,7 @@ void Assembler::extractLexems( const std::string &parseString )
 		std::string cur = extractNextLexem( parseString, parsePos );
 		if ( cur.empty() || (cur == ";") )	
 			break;
-		if ( first && !isspace( parseString[ 0 ] ) )
+		if ( first && processLabels && !isspace( parseString[ 0 ] ) )
 		{
 			curLabel = cur;
 		}
@@ -199,13 +204,16 @@ void Assembler::extractLexems( const std::string &parseString )
 				
 		}
 	}
-	for ( int i = 0; i < lexems.size(); i++ )
+	if ( processLabels )
 	{
-		if ( lexems[ i ][ 0 ] == '.' )
+		for ( int i = 0; i < lexems.size(); i++ )
 		{
-			if ( lastLabel.empty() )
-				throw ParseError( lineNum, "local label '" + lexems[ i ] + "' before global label!" );
-			lexems[ i ] = lastLabel + lexems[ i ];
+			if ( lexems[ i ][ 0 ] == '.' )
+			{
+				if ( lastLabel.empty() )
+					throw ParseError( lineNum, "local label '" + lexems[ i ] + "' before global label!" );
+				lexems[ i ] = lastLabel + lexems[ i ];
+			}
 		}
 	}
 	/*
@@ -621,27 +629,85 @@ void Assembler::parseLine( const std::string &line )
 
 }
 
+void Assembler::preProcessFile( const std::string &fileName )
+{
+	std::string line;
+	int innerLineNum = 1;
+	int fileNum = files.size();
+	files.emplace_back( fileName );
+	std::ifstream ifs( fileName );
+	if ( ifs.fail() )
+		throw PreProcessorError( fileNum, 0, "cannot open file '" + fileName + "'!" );
+	while ( std::getline( ifs, line ) )
+	{
+		lineNum++;
+		innerLineNum++;
+		extractLexems( line, false );
+		if ( (lexems.size() > 0) && (lexems[ 0 ][ 0 ] == '#') )
+		{
+			if ( lexems[ 0 ] == "#include" )
+			{
+				if ( lexems.size() != 2 )
+					throw PreProcessorError( fileNum, innerLineNum, "#include directive must has one string parameter!" );
+				if ( lexems[ 1 ][ 0 ] != '"' )
+					throw PreProcessorError( fileNum, innerLineNum, "#include directive parameter must be quoted string!" );
+				preProcessFile( &lexems[ 1 ][ 1 ] );
+			}
+			else
+			{
+				throw PreProcessorError( fileNum, innerLineNum, "unknown preprocessor directive '" + lexems[ 0 ] + "'!" );
+			}
+		}
+		else
+		{
+			lines.emplace_back( fileNum, innerLineNum, line );
+		}
+	};
+}
+
 bool Assembler::parseFile( const std::string &fileName )
 {
 	try
 	{
-		std::ifstream ifs( fileName );
+		lineNum = 0;
+		preProcessFile( fileName ); // preprocess
+		// dump lines:
+		/*
+		for ( int i = 0; i < lines.size(); i++ )
+		{
+			std::cout << "File " << lines[ i ].file << " line " << lines[ i ].num << ": " << lines[ i ].data << "\n";
+		}
+		*/
 		parseStart();
 		std::string line;
-		while ( std::getline( ifs, line ) )
+		for ( int i = 0; i < lines.size(); i++ )
 		{
-			parseLine( line );
-		};
+			parseLine( lines[ i ].data );
+		}
 		parseEnd();
+	}
+	catch ( const Simpleton::PreProcessorError &error )
+	{
+		int errorLine = error.getLine();
+		errorMessage = std::string( "Preprocessor error at file '" ) + files[ error.getFile() ].name + "' line " + std::to_string( error.getLine() ) + "\nReason: " + error.getReason();
+		return false;
 	}
 	catch ( const Simpleton::ParseError &error )
 	{
-		// fix for mingw error in using std::to_string...
-		//char buf[ 32 ];
-		//itoa( error.getLine(), buf, 10 );
-		//errorMessage = std::string( "Parse error at line " ) + buf + " reason: " + error.getReason();
-
-		errorMessage = std::string( "Parse error at line " ) + std::to_string( error.getLine() ) + " reason: " + error.getReason();
+		int errorLine = error.getLine();
+		SourceLine line{ -1, 0, "" };
+		SourceFile file{ "<unknown>" };
+		if ( (errorLine > 0) && (errorLine <= lines.size()) )
+			line = lines[ errorLine - 1 ];
+		if ( (line.file >= 0) && (line.file < files.size()) )
+			file = files[ line.file ];
+		
+		errorMessage = std::string( "Parse error at file '" ) + file.name + "' line " + std::to_string( line.num ) + ":\n" + line.data + "\n" + "Reason: " + error.getReason();
+		return false;
+	}
+	catch ( const std::exception &error )
+	{
+		errorMessage = std::string( "Unknown error: " ) + error.what();
 		return false;
 	}
 	return true;

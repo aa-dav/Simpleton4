@@ -1,4 +1,7 @@
 
+
+#include "source1.asm"
+
 		mode new
 
 		pc <- start

@@ -22,9 +22,36 @@ public:
 	const std::string &getReason() const { return reason; };
 };
 
+class PreProcessorError
+{
+	std::string reason;
+	int line;
+	int file;
+public:
+	PreProcessorError( int _file, int _line, const std::string &_reason ): file( _file ), line( _line ), reason( _reason ) {};
+	int getLine() const { return line; };
+	int getFile() const { return file; };
+	const std::string &getReason() const { return reason; };
+};
+
 class Assembler
 {
 private:
+	struct SourceFile
+	{
+		std::string name;
+		SourceFile( const std::string &src ): name( src ) {};
+	};
+	struct SourceLine
+	{
+		int file;
+		int num;
+		std::string data;
+		SourceLine( int f, int n, const std::string &d ): file( f ), num( n ), data( d ) {};
+	};
+	std::vector< SourceFile > files;
+	std::vector< SourceLine > lines;
+
 	struct Identifier
 	{
 		enum Type
@@ -82,7 +109,7 @@ private:
 
 	Identifier *findIdentifier( const std::string &name, bool newSyntex );
 	std::string extractNextLexem( const std::string &parseString, int &parsePos );
-	void extractLexems( const std::string &parseString );
+	void extractLexems( const std::string &parseString, bool processLabels = true );
 	void parseLine( const std::string &line );
 	std::string getNextLexem();
 
@@ -112,6 +139,9 @@ public:
 	void parseStart();
 	void parseEnd();
 	mWord parseConstExpr( const std::string &expr, int addrForForward = -1 );
+
+	void preProcessFile( const std::string &fileName );
+
 	bool parseFile( const std::string &fileName );
 	std::string getErrorMessage() { return errorMessage; };
 
