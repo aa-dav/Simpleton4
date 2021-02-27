@@ -46,8 +46,13 @@ private:
 	{
 		int file;
 		int num;
-		std::string data;
-		SourceLine( int f, int n, const std::string &d ): file( f ), num( n ), data( d ) {};
+		bool label;
+		std::vector< std::string > lexems;
+
+		SourceLine() {};
+		SourceLine(	int f, int n, bool lb,
+				const std::vector< std::string > &lx ): 
+				file( f ), num( n ), label( lb ), lexems( lx ) {};
 	};
 	std::vector< SourceFile > files;
 	std::vector< SourceLine > lines;
@@ -96,7 +101,6 @@ private:
 	std::string	lastLabel;
 	std::string	curLabel;
 	int		curLexem;
-	std::vector< std::string >	lexems;
 	std::vector< Identifier >	identifiers;
 	std::vector< ForwardReference >	forwards;
 	bool newSyntaxMode = false;
@@ -108,9 +112,11 @@ private:
 	void processArgument( const std::string &kind, const std::string &lexem, const int reg, const int value, const bool fwd );
 
 	Identifier *findIdentifier( const std::string &name, bool newSyntex );
+
 	std::string extractNextLexem( const std::string &parseString, int &parsePos );
-	void extractLexems( const std::string &parseString, bool processLabels = true );
-	void parseLine( const std::string &line );
+	void extractLexems( const std::string &parseString, SourceLine &line );
+
+	void parseLine();
 	std::string getNextLexem();
 
 public:

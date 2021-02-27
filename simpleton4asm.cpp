@@ -9,7 +9,6 @@ void Assembler::reset()
 	org = 0;
 	files.clear();
 	lines.clear();
-	lexems.clear();
 	identifiers.clear();
 	forwards.clear();
 }
@@ -17,6 +16,7 @@ void Assembler::reset()
 void Assembler::parseStart()
 {
 	lastLabel.clear();
+	curLabel.clear();
 	lineNum = 0;
 	errorMessage.clear();
 
@@ -161,11 +161,10 @@ std::string Assembler::extractNextLexem( const std::string &parseString, int &pa
 	return res;
 };
 
-void Assembler::extractLexems( const std::string &parseString, bool processLabels )
+void Assembler::extractLexems( const std::string &parseString, SourceLine &line )
 {
-	lexems.clear();
-	curLexem = 0;
-	curLabel.clear();
+	line.lexems.clear();
+	line.label = false;
 	bool first = true;
 	int parsePos = 0;
 	while ( true )
@@ -173,65 +172,19 @@ void Assembler::extractLexems( const std::string &parseString, bool processLabel
 		std::string cur = extractNextLexem( parseString, parsePos );
 		if ( cur.empty() || (cur == ";") )	
 			break;
-		if ( first && processLabels && !isspace( parseString[ 0 ] ) )
+		if ( first && !isspace( parseString[ 0 ] ) )
 		{
-			curLabel = cur;
+			line.label = true;
 		}
-		else
-		{
-			lexems.push_back( cur );
-		}
+		line.lexems.push_back( cur );
 	        first = false;
 	}
-	if ( !curLabel.empty() )
-	{
-		if ( curLabel[ 0 ] == '.' )
-		{
-			if ( lastLabel.empty() )
-				throw ParseError( lineNum, "local label '" + curLabel + "' before global label!" );
-			curLabel = lastLabel + curLabel;
-		}
-		else
-		{
-			if ( (lexems.size() > 0) && (lexems[ 0 ] == "=") )
-			{
-				// supress lastLabel change for equatations...
-			}
-			else
-			{
-				lastLabel = curLabel;
-			}
-				
-		}
-	}
-	if ( processLabels )
-	{
-		for ( int i = 0; i < lexems.size(); i++ )
-		{
-			if ( lexems[ i ][ 0 ] == '.' )
-			{
-				if ( lastLabel.empty() )
-					throw ParseError( lineNum, "local label '" + lexems[ i ] + "' before global label!" );
-				lexems[ i ] = lastLabel + lexems[ i ];
-			}
-		}
-	}
-	/*
-	if ( !curLabel.empty() || lexems.size() )
-	{
-		if ( !curLabel.empty() )
-			std::cout << curLabel << ": ";
-		for ( auto &it: lexems )
-			std::cout << it << " ";
-		std::cout << "\n";
-	};
-	*/
 }
 
 std::string Assembler::getNextLexem()
 {
-	if ( curLexem < lexems.size() )
-		return lexems[ curLexem++ ];
+	if ( curLexem < lines[ lineNum - 1 ].lexems.size() )
+		return lines[ lineNum - 1 ].lexems[ curLexem++ ];
 	else
 		return std::string();
 };
@@ -319,7 +272,7 @@ void Assembler::processArgument( const std::string &kind, const std::string &lex
 	};
 }
 
-void Assembler::parseLine( const std::string &line )
+void Assembler::parseLine()
 {
 	bool invertX = false;
 	bool emitForCall = false;
@@ -337,14 +290,12 @@ void Assembler::parseLine( const std::string &line )
 	fwdX.clear();
 	fwdY.clear();
 
-	lineNum++;
-	extractLexems( line );
-
 	if ( !curLabel.empty() )
 	{
 		if ( findIdentifier( curLabel, newSyntax ) != nullptr )
 			throw ParseError( lineNum, "identifier " + curLabel + " is redefined!" );
 		identifiers.emplace_back( curLabel, Identifier::Symbol, org, Identifier::AsmBoth );
+		//std::cout << "New identif added: " << curLabel << "\n";
 	}
 	std::string lexem;
 	bool first = true;
@@ -637,30 +588,34 @@ void Assembler::preProcessFile( const std::string &fileName )
 	files.emplace_back( fileName );
 	std::ifstream ifs( fileName );
 	if ( ifs.fail() )
-		throw PreProcessorError( fileNum, 0, "cannot open file '" + fileName + "'!" );
+		throw PreProcessorError( fileNum - 1, lineNum, "cannot open file '" + fileName + "'!" );
 	while ( std::getline( ifs, line ) )
 	{
 		lineNum++;
 		innerLineNum++;
-		extractLexems( line, false );
-		if ( (lexems.size() > 0) && (lexems[ 0 ][ 0 ] == '#') )
+		SourceLine l;
+		l.file = fileNum;
+		l.num = innerLineNum;
+		extractLexems( line, l );
+		if ( (l.lexems.size() > 0) && (l.lexems[ 0 ][ 0 ] == '#') )
 		{
-			if ( lexems[ 0 ] == "#include" )
+			if ( l.lexems[ 0 ] == "#include" )
 			{
-				if ( lexems.size() != 2 )
+				if ( l.lexems.size() != 2 )
 					throw PreProcessorError( fileNum, innerLineNum, "#include directive must has one string parameter!" );
-				if ( lexems[ 1 ][ 0 ] != '"' )
+				if ( l.lexems[ 1 ][ 0 ] != '"' )
 					throw PreProcessorError( fileNum, innerLineNum, "#include directive parameter must be quoted string!" );
-				preProcessFile( &lexems[ 1 ][ 1 ] );
+				preProcessFile( &l.lexems[ 1 ][ 1 ] );
 			}
 			else
 			{
-				throw PreProcessorError( fileNum, innerLineNum, "unknown preprocessor directive '" + lexems[ 0 ] + "'!" );
+				throw PreProcessorError( fileNum, innerLineNum, "unknown preprocessor directive '" + l.lexems[ 0 ] + "'!" );
 			}
 		}
 		else
 		{
-			lines.emplace_back( fileNum, innerLineNum, line );
+			if ( l.lexems.size() > 0 )
+				lines.push_back( l );
 		}
 	};
 }
@@ -671,38 +626,78 @@ bool Assembler::parseFile( const std::string &fileName )
 	{
 		lineNum = 0;
 		preProcessFile( fileName ); // preprocess
-		// dump lines:
-		/*
+		// process local labels:
 		for ( int i = 0; i < lines.size(); i++ )
 		{
-			std::cout << "File " << lines[ i ].file << " line " << lines[ i ].num << ": " << lines[ i ].data << "\n";
+			std::cout << "File " << lines[ i ].file << " line " << lines[ i ].num << ":";
+			if ( !lines[ i ].label ) std::cout << "    ";
+			for ( int j = 0; j < lines[ i ].lexems.size(); j++ )
+			{
+				std::cout << " " << lines[ i ].lexems[ j ];
+			}
+			std::cout << "\n";
 		}
-		*/
 		parseStart();
 		std::string line;
 		for ( int i = 0; i < lines.size(); i++ )
 		{
-			parseLine( lines[ i ].data );
+			lineNum++;
+			curLexem = 0;
+			curLabel.clear();
+
+			std::vector< std::string > &lexems = lines[ i ].lexems;
+			if ( lines[ i ].label )
+			{
+				if ( lexems[ 0 ][ 0 ] != '.' )
+					lastLabel = lexems[ 0 ];	// update last label if it is not local
+			}
+			for ( int j = 0; j < lexems.size(); j++ )	// modify local ifentifiers
+			{
+				if ( lexems[ j ][ 0 ] == '.' )
+				{
+					if ( lastLabel.empty() )
+						throw ParseError( lineNum, "local label '" + lexems[ j ] + "' before global label!" );
+					lexems[ j ] = lastLabel + lexems[ j ];
+				}
+			}
+			if ( lines[ i ].label )	// assign current label if needed
+			{
+				curLabel = lines[ i ].lexems[ 0 ];
+				curLexem++;
+			}
+			parseLine();
 		}
 		parseEnd();
+		// Dump identifiers...
+		for ( auto &i : identifiers )
+		{
+			if ( i.type == Identifier::Symbol )
+				std::cout << "Symbol: " << i.name << " value: " << i.value << "\n";
+		}
 	}
 	catch ( const Simpleton::PreProcessorError &error )
 	{
 		int errorLine = error.getLine();
-		errorMessage = std::string( "Preprocessor error at file '" ) + files[ error.getFile() ].name + "' line " + std::to_string( error.getLine() ) + "\nReason: " + error.getReason();
+		std::string fname;
+		if ( error.getFile() >= 0 )
+			fname = files[ error.getFile() ].name;
+		errorMessage = std::string( "Preprocessor error at file '" ) + fname + "' line " + std::to_string( error.getLine() ) + " Reason: " + error.getReason();
 		return false;
 	}
 	catch ( const Simpleton::ParseError &error )
 	{
 		int errorLine = error.getLine();
-		SourceLine line{ -1, 0, "" };
+		SourceLine line;
+		line.file = -1;
+		line.num = 0;
+		line.label = false;
 		SourceFile file{ "<unknown>" };
 		if ( (errorLine > 0) && (errorLine <= lines.size()) )
 			line = lines[ errorLine - 1 ];
 		if ( (line.file >= 0) && (line.file < files.size()) )
 			file = files[ line.file ];
 		
-		errorMessage = std::string( "Parse error at file '" ) + file.name + "' line " + std::to_string( line.num ) + ":\n" + line.data + "\n" + "Reason: " + error.getReason();
+		errorMessage = std::string( "Parse error at file '" ) + file.name + "' line " + std::to_string( line.num ) + " Reason: " + error.getReason();
 		return false;
 	}
 	catch ( const std::exception &error )
