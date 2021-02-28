@@ -114,7 +114,7 @@ private:
 	Identifier *findIdentifier( const std::string &name, bool newSyntex );
 
 	std::string extractNextLexem( const std::string &parseString, int &parsePos );
-	void extractLexems( const std::string &parseString, SourceLine &line );
+	void extractLexems( const std::string &parseString, std::vector< std::string > &data, bool &hasLabel );
 
 	void parseLine();
 	std::string getNextLexem();

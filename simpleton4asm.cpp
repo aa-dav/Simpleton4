@@ -161,10 +161,10 @@ std::string Assembler::extractNextLexem( const std::string &parseString, int &pa
 	return res;
 };
 
-void Assembler::extractLexems( const std::string &parseString, SourceLine &line )
+void Assembler::extractLexems( const std::string &parseString, std::vector< std::string > &data, bool &hasLabel )
 {
-	line.lexems.clear();
-	line.label = false;
+	data.clear();
+	hasLabel = false;
 	bool first = true;
 	int parsePos = 0;
 	while ( true )
@@ -174,9 +174,9 @@ void Assembler::extractLexems( const std::string &parseString, SourceLine &line 
 			break;
 		if ( first && !isspace( parseString[ 0 ] ) )
 		{
-			line.label = true;
+			hasLabel = true;
 		}
-		line.lexems.push_back( cur );
+		data.push_back( cur );
 	        first = false;
 	}
 }
@@ -593,29 +593,28 @@ void Assembler::preProcessFile( const std::string &fileName )
 	{
 		lineNum++;
 		innerLineNum++;
-		SourceLine l;
-		l.file = fileNum;
-		l.num = innerLineNum;
-		extractLexems( line, l );
-		if ( (l.lexems.size() > 0) && (l.lexems[ 0 ][ 0 ] == '#') )
+		std::vector< std::string > lexems;
+		bool hasLabel;
+		extractLexems( line, lexems, hasLabel );
+		if ( (lexems.size() > 0) && (lexems[ 0 ][ 0 ] == '#') )
 		{
-			if ( l.lexems[ 0 ] == "#include" )
+			if ( lexems[ 0 ] == "#include" )
 			{
-				if ( l.lexems.size() != 2 )
+				if ( lexems.size() != 2 )
 					throw PreProcessorError( fileNum, innerLineNum, "#include directive must has one string parameter!" );
-				if ( l.lexems[ 1 ][ 0 ] != '"' )
+				if ( lexems[ 1 ][ 0 ] != '"' )
 					throw PreProcessorError( fileNum, innerLineNum, "#include directive parameter must be quoted string!" );
-				preProcessFile( &l.lexems[ 1 ][ 1 ] );
+				preProcessFile( &lexems[ 1 ][ 1 ] );
 			}
 			else
 			{
-				throw PreProcessorError( fileNum, innerLineNum, "unknown preprocessor directive '" + l.lexems[ 0 ] + "'!" );
+				throw PreProcessorError( fileNum, innerLineNum, "unknown preprocessor directive '" + lexems[ 0 ] + "'!" );
 			}
 		}
 		else
 		{
-			if ( l.lexems.size() > 0 )
-				lines.push_back( l );
+			if ( lexems.size() > 0 )
+				lines.emplace_back( fileNum, innerLineNum, hasLabel, lexems );
 		}
 	};
 }
@@ -626,7 +625,8 @@ bool Assembler::parseFile( const std::string &fileName )
 	{
 		lineNum = 0;
 		preProcessFile( fileName ); // preprocess
-		// process local labels:
+		// Preprocessed source dump:
+		/*
 		for ( int i = 0; i < lines.size(); i++ )
 		{
 			std::cout << "File " << lines[ i ].file << " line " << lines[ i ].num << ":";
@@ -637,6 +637,8 @@ bool Assembler::parseFile( const std::string &fileName )
 			}
 			std::cout << "\n";
 		}
+		*/
+		// Assemble source code:
 		parseStart();
 		std::string line;
 		for ( int i = 0; i < lines.size(); i++ )
@@ -647,18 +649,13 @@ bool Assembler::parseFile( const std::string &fileName )
 
 			std::vector< std::string > &lexems = lines[ i ].lexems;
 			if ( lines[ i ].label )
-			{
 				if ( lexems[ 0 ][ 0 ] != '.' )
 					lastLabel = lexems[ 0 ];	// update last label if it is not local
-			}
-			for ( int j = 0; j < lexems.size(); j++ )	// modify local ifentifiers
+			// explode local ifentifiers
+			for ( int j = 0; j < lexems.size(); j++ )
 			{
 				if ( lexems[ j ][ 0 ] == '.' )
-				{
-					if ( lastLabel.empty() )
-						throw ParseError( lineNum, "local label '" + lexems[ j ] + "' before global label!" );
 					lexems[ j ] = lastLabel + lexems[ j ];
-				}
 			}
 			if ( lines[ i ].label )	// assign current label if needed
 			{
