@@ -1,5 +1,7 @@
 # Simpleton 4
 
+( œŒ –”—— »: https://hype.retroscene.org/blog/1062.html )
+
 Some of 8bit-guy videos including covering of project 'Gigatron TTL' inspired me to make some ISAs.
 This is fourth generation of the same idea (see below).
 
