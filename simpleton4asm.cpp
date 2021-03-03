@@ -30,6 +30,7 @@ void Assembler::parseStart()
 	identifiers.emplace_back( "r6",		Identifier::Register, REG_R6,	Identifier::AsmBoth );
 	identifiers.emplace_back( "r7",		Identifier::Register, REG_R7,	Identifier::AsmBoth );
 	identifiers.emplace_back( "pc",		Identifier::Register, REG_PC,	Identifier::AsmBoth );
+	identifiers.emplace_back( "void",	Identifier::Register, IND_PC,	Identifier::AsmBoth );
 	identifiers.emplace_back( "sp",		Identifier::Register, REG_SP,	Identifier::AsmBoth );
 	identifiers.emplace_back( "psw",	Identifier::Register, REG_PSW,	Identifier::AsmBoth );
 
@@ -40,7 +41,6 @@ void Assembler::parseStart()
 	identifiers.emplace_back( "adc",	Identifier::Command, OP_ADC,	Identifier::AsmClassic );
 	identifiers.emplace_back( "sub",	Identifier::Command, OP_SUB,	Identifier::AsmClassic );
 	identifiers.emplace_back( "sbc",	Identifier::Command, OP_SBC,	Identifier::AsmClassic );
-	identifiers.emplace_back( "cmp",	Identifier::Command, OP_CMP,	Identifier::AsmClassic );
 	identifiers.emplace_back( "and",	Identifier::Command, OP_AND,	Identifier::AsmClassic );
 	identifiers.emplace_back( "or",		Identifier::Command, OP_OR,	Identifier::AsmClassic );
 	identifiers.emplace_back( "xor",	Identifier::Command, OP_XOR,	Identifier::AsmClassic );
@@ -56,7 +56,6 @@ void Assembler::parseStart()
 	identifiers.emplace_back( "+c",		Identifier::Command, OP_ADC,	Identifier::AsmNew );
 	identifiers.emplace_back( "-",		Identifier::Command, OP_SUB,	Identifier::AsmNew );
 	identifiers.emplace_back( "-c",		Identifier::Command, OP_SBC,	Identifier::AsmNew );
-	identifiers.emplace_back( "?",		Identifier::Command, OP_CMP,	Identifier::AsmNew );
 	identifiers.emplace_back( "&",		Identifier::Command, OP_AND,	Identifier::AsmNew );
 	identifiers.emplace_back( "|",		Identifier::Command, OP_OR,	Identifier::AsmNew );
 	identifiers.emplace_back( "^",		Identifier::Command, OP_XOR,	Identifier::AsmNew );
@@ -241,8 +240,8 @@ void Assembler::processArgument( const std::string &kind, const std::string &lex
 	if (	(!newSyntax && (stage == 1)) ||
 		(newSyntax && (stage == 0)) )
 	{
-		if ( reg == IMMED )
-			throw ParseError( lineNum, "R cannot be immediate!" );
+		//if ( reg == IMMED )
+		//	throw ParseError( lineNum, "R cannot be immediate!" );
 		r = reg;
 		emitR = value;
 		if ( fwd )
@@ -666,11 +665,13 @@ bool Assembler::parseFile( const std::string &fileName )
 		}
 		parseEnd();
 		// Dump identifiers...
+		/*
 		for ( auto &i : identifiers )
 		{
 			if ( i.type == Identifier::Symbol )
 				std::cout << "Symbol: " << i.name << " value: " << i.value << "\n";
 		}
+		*/
 	}
 	catch ( const Simpleton::PreProcessorError &error )
 	{

@@ -10,44 +10,47 @@ namespace Simpleton
 }
 
 static const char *NameCmds[] = {
-"ADDIS",
-"ADDI ",
-"ADDS ",
-"ADD  ",
-"ADC  ",
-"SUB  ",
-"SBC  ",
-"AND  ",
-"OR   ",
-"XOR  ",
-"CMP  ",
-"CADD ",
-"RRCI ",
-"RRC  " };
+"addis",
+"addi ",
+"adds ",
+"add  ",
+"adc  ",
+"sub  ",
+"sbc  ",
+"and  ",
+"or   ",
+"xor  ",
+"cadd ",
+"rrci ",
+"rrc  " };
 
 static const char *NameRegs[] = {
-"R0",
-"R1",
-"R2",
-"R3",
-"R4",
-"SP",
-"PC",
-"PW",
-"[ R0 ]",
-"[ R1 ]",
-"[ R2 ]",
-"[ R3 ]",
-"[ R4 ]",
-"[ SP ]",
-"[ PC ]",
-"[ PW ]"
+"r0",
+"r1",
+"r2",
+"r3",
+"r4",
+"sp",
+"pc",
+"pw",
+"[ r0 ]",
+"[ r1 ]",
+"[ r2 ]",
+"[ r3 ]",
+"[ r4 ]",
+"[ sp ]",
+"[ pc ]",
+"[ pw ]"
 };
 
-std::string Machine::operandToStr( mTag r, mTag i, int &addr )
+std::string Machine::operandToStr( mTag r, mTag i, int &addr, bool result )
 {
 	std::stringstream ss;
-	if ( (i == 1) && (r == REG_PC) )
+	if ( result && (i == 1) && (r == REG_PC) )
+	{
+		ss << "void";
+	}
+	else if ( (i == 1) && (r == REG_PC) )
 	{
 		ss << "$" << std::uppercase << std::hex << getMem( addr++ );
 	}
@@ -78,7 +81,7 @@ void Machine::showDisasm( int addr )
 		sx = operandToStr( instr.x, instr.xi, addr );
 	}
 	sy = operandToStr( instr.y, instr.yi, addr );
-	sr = operandToStr( instr.r, instr.ri, addr );
+	sr = operandToStr( instr.r, instr.ri, addr, true );
 	std::cout << sr << " " << sy << " " << sx << "\n";
 };
 
@@ -201,13 +204,6 @@ void Machine::step()
 			tmp = x ^ y;
 			mathTempApply();
 			break;
-	case OP_CMP:	// cmp
-			a = y;	// to keep Y intact...
-			tmp = y - x;
-			setFlag( FLAG_CARRY, (tmp & 0x10000) != 0 );
-			setFlag( FLAG_ZERO, (tmp & 0xFFFF) == 0 );
-			setFlag( FLAG_SIGN, (tmp & 0x8000) != 0 );
-			break;
 	case OP_CADD:	// conditional add
 			cond = (x >> 13) & 0b111;
 			x = x & 0b1111111111111; // 13 bit
@@ -237,15 +233,18 @@ void Machine::step()
 	// store
 	if ( instr.ri )
 	{
-		mWord addr;
-		if ( instr.r == REG_SP )
-			reg[ instr.r ]--;
-		if ( instr.r == REG_PSW )
-			addr = fetch();
-		else
-			addr = reg[ instr.r ];
-		//std::cout << "addr:" << addr << " writ:" << a << "\n";
-		setMem( addr, a );
+		if ( instr.r != REG_PC )	// Indirect writes to PC are ignored (destination 'void')
+		{
+			mWord addr;
+			if ( instr.r == REG_SP )
+				reg[ instr.r ]--;
+			if ( instr.r == REG_PSW )
+				addr = fetch();
+			else
+				addr = reg[ instr.r ];
+			//std::cout << "addr:" << addr << " writ:" << a << "\n";
+			setMem( addr, a );
+		}
 	}
 	else
 	{

@@ -66,10 +66,9 @@ const int OP_SBC	=	0x06;
 const int OP_AND	=	0x07;
 const int OP_OR		=	0x08;
 const int OP_XOR	=	0x09;
-const int OP_CMP	=	0x0A;
-const int OP_CADD	=	0x0B;
-const int OP_RRCI	=	0x0C;
-const int OP_RRC	=	0x0D;
+const int OP_CADD	=	0x0A;
+const int OP_RRCI	=	0x0B;
+const int OP_RRC	=	0x0C;
 
 const int PORT_CONSOLE	=	0xFFFF;
 const int PORT_START	=	0xFFFF;
@@ -158,7 +157,7 @@ public:
 	void step();
 	void show();
 
-	std::string operandToStr( mTag r, mTag i, int &addr );
+	std::string operandToStr( mTag r, mTag i, int &addr, bool result = false );
 	void showDisasm( int addr );
 
 	friend class Assembler;
