@@ -23,7 +23,7 @@ So, every instruction do C expression: R = Y op X, where op is operation code. S
 
 Registers **R5-R7** have synonyms and special features:
 - **R5 = SP** - stack pointer - post-increments after indirect reading and pre-decrements before indirect writing.
-- **R6 = PC** - program counter - always post-increments after indirect reading
+- **R6 = PC** - program counter - always post-increments after indirect reading. Indirect writing to PC is meaningless and cancels write from ALU to R. That is ALU performs operation, updates flags, but result is not going anywhere.
 - **R7 = PSW** = processor status word (flags, including enable/disable interrupts). Indirect reading/writing is meaningless, so it works as 'immediate indirect' address mode (data from [ PC++ ] serves as address of memory cell we work with).
 
 Immediate data is available as indirect PC reading because after reading instruction code PC post-increments (as always) and points to next word and will be advanced to the next word after indirect reading.
@@ -54,10 +54,9 @@ There are 16 ALU operations possible. Next opcodes are in use right now:
 - 07 **AND** - and
 - 08 **OR** - or
 - 09 **XOR** - xor
-- 0A **CMP** - compare (as if Y - X) Always returns Y from ALU, so it works as usual CMP in form: cmp a a b, but can have more tricky behaviour if R <> Y.
-- 0B **CADD** - conditional add. never updates flags. (see below!)
-- 0C **RRCI** - rotate Y right (cyclic) by INPLACE immediate bit, carry gets last rotated bit
-- 0D **RRC** - rotate Y right (cyclic) by X bit, carry gets last rotated bit
+- 0A **CADD** - conditional add. never updates flags. (see below!)
+- 0B **RRCI** - rotate Y right (cyclic) by INPLACE immediate bit, carry gets last rotated bit
+- 0C **RRC** - rotate Y right (cyclic) by X bit, carry gets last rotated bit
 
 ## NOTES:
 
@@ -116,6 +115,30 @@ and psw psw flag_mask ; enable
 or psw psw ~flag_mask ; disable (inverse of flag bit)
 ```
 
+8.  Keyword 'void' in place of R means writing to [ PC ] (forbidden) - that is cancelation of writing result from ALU anywhere.
+This allows to make non-destructing comparisons:
+```                                              
+sub void A B ; acts like 'cmp A B' in many other ISAs
+jnz ...
+```
+or bit tests (of any kind):
+```
+and void r0 $0001
+jz ...
+```
+...or comparison of number with constant in range -8..+7 via one-word instruction (inplace immediate:
+```
+addi void r0 -3
+jz ... ; r0 is equal to 3
+```
+...or checking of i-th bit of operand via placing it in carry flag during RRCI instruction execution:
+```
+rrci void r0 3 ; CF gets bit 3
+jc ... ; jump if CF=1
+```
+
+
+
 Given $FFFF is console memory-mapped input/output port next program is assembled and emulated already:
 ```
 PORT_CONSOLE    = $FFFF
@@ -155,15 +178,14 @@ Next instructions fulfill this pattern (example for R=R0, Y=R1 and X=[ label ]):
 07 - AND  : r0 = r1 &  [ label ] ; and
 08 - OR   : r0 = r1 |  [ label ] ; or
 09 - XOR  : r0 = r1 ^  [ label ] ; xor
-0A - CMP  : r0 = r1 ?  [ label ] ; compare (as Y - X), op updates flags and returns Y
-0B - CADD : r0 = r1 +? [ label ] ; conditional add. never updates flags.
-0D - RRC  : r0 = r1 >> [ label ] ; rotate Y right (cyclic) by X bits
+0A - CADD : r0 = r1 +? [ label ] ; conditional add. never updates flags.
+0C - RRC  : r0 = r1 >> [ label ] ; rotate Y right (cyclic) by X bits
 ```
 But there are 3 opcodes (right now) which fall out of this pattern and have special syntax:
 ```
 00 - ADDIS : r0 <- r1 - 1         ; add Y with INPLACE immediate in XI+X SILENT (flags are not updated)
 01 - ADDI  : r0 <= r1 + 3         ; add Y with INPLACE immediate in XI+X
-0C - RRCI  : r0 <= r1 >> 15       ; rotate Y right (cyclic) by INPLACE immediate bits
+0B - RRCI  : r0 <= r1 >> 15       ; rotate Y right (cyclic) by INPLACE immediate bits
 ```
 First of all - it's 'inplace immediate' commands: addi, addis and rcci. These of them who updates flags use '<=' as sign of this special case. 
 The only exceptions is 'addis' which uses '<-' to signal that it's not updates flags.
@@ -188,7 +210,7 @@ PORT_CONSOLE    = $FFFF
             dw 0 ; STOP
 
 str_print   r1 <= [ r0 ]           ; testing move (addi r1 [ r0 ] 0)
-            jz .exit           
+            jz .exit
             [ PORT_CONSOLE ] <- r1 ; output char to console
             r0 <- r0 + 1           ; increment r0
             pc <- str_print        ; jump to the beginning of procedure
