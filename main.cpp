@@ -9,7 +9,8 @@ int main( int argc, char *argv[] )
 	{
 		while ( m.currentOp() != 0 )	// nop as stop
 		{
-			m.showDisasm( m.getPC() );
+			if ( (argc > 1) && (std::string( "d" ) == argv[ 1 ]) )
+				m.showDisasm( m.getPC() );
 			m.step();
 		}
 		m.show();
